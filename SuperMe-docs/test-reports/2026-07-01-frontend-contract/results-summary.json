@@ -1,0 +1,176 @@
+[
+  {
+    "loop": 1,
+    "name": "App shell and runtime connection",
+    "pass": true,
+    "blocked": false,
+    "screenshots": [
+      "assets/loop-01-app-shell.png"
+    ],
+    "backendKeys": [
+      "healthy",
+      "adapter",
+      "runtime"
+    ]
+  },
+  {
+    "loop": 2,
+    "name": "No-session chat send and runtime reply",
+    "pass": true,
+    "blocked": false,
+    "screenshots": [
+      "assets/loop-02-before-send.png",
+      "assets/loop-02-running.png",
+      "assets/loop-02-after-reply.png"
+    ],
+    "backendKeys": [
+      "latestSession",
+      "messages"
+    ]
+  },
+  {
+    "loop": 3,
+    "name": "Refresh snapshot and session replay",
+    "pass": true,
+    "blocked": false,
+    "caveat": "Reload lands on Active filter with no idle session selected; selecting All restores latest session and messages.",
+    "screenshots": [
+      "assets/loop-03-reload-snapshot.png",
+      "assets/loop-03-after-all-filter.png"
+    ],
+    "backendKeys": [
+      "latestSession",
+      "messages"
+    ]
+  },
+  {
+    "loop": 4,
+    "name": "Files tree and settings catalogs",
+    "pass": true,
+    "blocked": false,
+    "caveat": "Files UI displays ignored/sensitive entries such as .env; backend marks ignored entries but frontend does not hide them.",
+    "screenshots": [
+      "assets/loop-04-files-tree.png",
+      "assets/loop-04-settings.png",
+      "assets/loop-04-settings-scrolled.png"
+    ],
+    "backendKeys": [
+      "files",
+      "settings",
+      "permissions",
+      "skillsCount",
+      "connectors"
+    ]
+  },
+  {
+    "loop": 5,
+    "name": "Artifact registration, preview, version metadata, provenance",
+    "pass": true,
+    "blocked": false,
+    "caveat": "Returning from Settings requires reopening the session list; artifact is not made active by artifact.created alone.",
+    "screenshots": [
+      "assets/loop-05-artifact-preview.png",
+      "assets/loop-05-artifact-preview-after-session-reopen.png"
+    ],
+    "backendKeys": [
+      "register",
+      "versions",
+      "provenance"
+    ]
+  },
+  {
+    "loop": 6,
+    "name": "Artifact provenance panel and star operation",
+    "pass": true,
+    "blocked": false,
+    "screenshots": [
+      "assets/loop-06-provenance-tabs.png",
+      "assets/loop-06-artifact-starred.png"
+    ],
+    "backendKeys": [
+      "artifact",
+      "provenance"
+    ]
+  },
+  {
+    "loop": 7,
+    "name": "Plan proposal and approval flow",
+    "pass": true,
+    "blocked": false,
+    "caveat": "Plan approval works and steps remain pending; UI still renders Approve/Request revision actions after approved state.",
+    "screenshots": [
+      "assets/loop-07-plan-proposed.png",
+      "assets/loop-07-plan-approved.png"
+    ],
+    "backendKeys": [
+      "command",
+      "before",
+      "after"
+    ]
+  },
+  {
+    "loop": 8,
+    "name": "Annotation staging chip and commit with next message",
+    "pass": true,
+    "blocked": false,
+    "caveat": "Annotation staging and commit succeeded; after commit, UI showed assistant reply before the user message for this turn, which suggests message ordering should be reviewed.",
+    "screenshots": [
+      "assets/loop-08-annotation-staged.png",
+      "assets/loop-08-annotation-committed.png"
+    ],
+    "backendKeys": [
+      "stageCommand",
+      "before",
+      "after",
+      "messages"
+    ]
+  },
+  {
+    "loop": 9,
+    "name": "Reviewer explicit failure and manual findings flow",
+    "pass": false,
+    "blocked": false,
+    "screenshots": [
+      "assets/loop-09-reviewer-explicit-failure.png",
+      "assets/loop-09-reviewer-findings-card.png"
+    ],
+    "backendKeys": [
+      "manualCommand",
+      "reviews",
+      "provenance"
+    ]
+  },
+  {
+    "loop": 10,
+    "name": "Delegation track and remote job lifecycle",
+    "pass": true,
+    "blocked": false,
+    "caveat": "Backend remote job status succeeded is shown in the frontend as completed; log line is rendered.",
+    "screenshots": [
+      "assets/loop-10-track-created.png",
+      "assets/loop-10-remote-job-succeeded.png"
+    ],
+    "backendKeys": [
+      "tracks",
+      "submit",
+      "log",
+      "update",
+      "jobsBefore",
+      "jobsAfter"
+    ]
+  },
+  {
+    "loop": 11,
+    "name": "Permission cards and settings snapshot",
+    "pass": false,
+    "blocked": true,
+    "caveat": "Settings/HTTP permissions snapshot is available, but no contract command exists to synthesize a permission.requested event and the current managed OpenCode run did not expose a deterministic permission prompt to approve/deny from the UI.",
+    "screenshots": [
+      "assets/loop-04-settings.png",
+      "assets/loop-04-settings-scrolled.png"
+    ],
+    "backendKeys": [
+      "permissions"
+    ]
+  }
+]

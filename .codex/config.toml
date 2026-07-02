@@ -1,0 +1,4 @@
+# BEGIN SUPERME MANAGED CONFIG
+# Limit Codex context usage for SuperMe-managed projects.
+model_context_window = 250000
+# END SUPERME MANAGED CONFIG

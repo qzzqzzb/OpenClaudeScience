@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "provider": {
+    "deepseek": {
+      "models": {
+        "deepseek-chat": {}
+      },
+      "options": {
+        "apiKey": "{env:DEEPSEEK_API_KEY}",
+        "baseURL": "{env:DEEPSEEK_BASE_URL}"
+      }
+    }
+  },
+  "enabled_providers": ["deepseek"]
+}

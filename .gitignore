@@ -1,6 +1,9 @@
 node_modules/
 dist/
-.pnpm-store/
-src-tauri/target/
-*.log
-.DS_Store
+.env
+.env.*
+!.env.example
+.adapter-artifacts/
+.adapter-run-logs/
+npm-debug.log*
+*.tsbuildinfo

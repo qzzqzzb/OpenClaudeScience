@@ -364,6 +364,8 @@ export type AdapterCommandName =
   | "permission.respond"
   | "plan.approve"
   | "plan.requestRevision"
+  | "plan.propose"
+  | "plan.recordStepResult"
   | "artifact.open"
   | "artifact.star"
   | "artifact.rename"
@@ -374,7 +376,11 @@ export type AdapterCommandName =
   | "annotation.commitWithMessage"
   | "reviewer.run"
   | "track.spawn"
+  | "track.update"
   | "track.stop"
+  | "remoteJob.submit"
+  | "remoteJob.update"
+  | "remoteJob.appendLog"
   | "settings.update";
 
 export type AdapterEventName =
@@ -411,4 +417,6 @@ export type AdapterEventName =
   | "track.message"
   | "track.completed"
   | "runtime.statusChanged"
-  | "remoteJob.statusChanged";
+  | "remoteJob.submitted"
+  | "remoteJob.statusChanged"
+  | "remoteJob.logAppended";

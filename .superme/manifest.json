@@ -1,0 +1,65 @@
+{
+  "installed_at": "2026-07-01T06:44:58+00:00",
+  "managed_files": {
+    ".codex/config.toml": {
+      "begin_marker": "# BEGIN SUPERME MANAGED CONFIG",
+      "end_marker": "# END SUPERME MANAGED CONFIG",
+      "mode": "toml_block",
+      "template": ".codex/config.block.toml",
+      "template_hash": "883b369d3c1976b10ffc6f987f3beb67cbbcda826867418a03aeae7a14835e66"
+    },
+    ".codex/hooks.json": {
+      "event": "Stop",
+      "mode": "json_hook",
+      "template_hash": "7537e7cbe4d03fb5baf36f7f1b821fadf58aba24881dc7d1490e73e9dd0de798"
+    },
+    ".codex/hooks/superme_stop.py": {
+      "mode": "file",
+      "template": ".codex/hooks/superme_stop.py",
+      "template_hash": "93049ee6e8616a9cbca01c386b6cd8d0009956854d8b7a98626847ef55db0bec"
+    },
+    "AGENTS.md": {
+      "begin_marker": "<!-- BEGIN SUPERME MANAGED BLOCK -->",
+      "end_marker": "<!-- END SUPERME MANAGED BLOCK -->",
+      "mode": "block",
+      "template": "AGENTS.block.md",
+      "template_hash": "d21d48a970af6dee0f285448b30b214b4ec7fdc219a8f6ccafc3dd84191c1a6a"
+    },
+    "SuperMe-policies/anti-patterns.md": {
+      "mode": "file",
+      "template": "SuperMe-policies/anti-patterns.md",
+      "template_hash": "4635cf541bc3066d9e076cf867ecb082baae2b55688e4becd7b0c766523581a0"
+    },
+    "SuperMe-policies/constitution.md": {
+      "mode": "file",
+      "template": "SuperMe-policies/constitution.md",
+      "template_hash": "e0587eb5733caf8ff2dff0ef65815156109be6858f03af7467c5f75efe6d7732"
+    },
+    "SuperMe-policies/default-workflow.md": {
+      "mode": "file",
+      "template": "SuperMe-policies/default-workflow.md",
+      "template_hash": "45138c5ab50fe9c33e600ae1d317f8c802fd963cf49ebc4f02c567b1db0f020b"
+    },
+    "SuperMe-policies/user-preferences.md": {
+      "mode": "file",
+      "template": "SuperMe-policies/user-preferences.md",
+      "template_hash": "890d4bbbe47af0fb4b6de73c71488ae13422608b209b2c2574fb955c20a38ad9"
+    }
+  },
+  "project_owned_files": [
+    "SuperMe-docs/20-workflow-incidents.md",
+    "SuperMe-docs/30-upstream-proposals.md",
+    "SuperMe-docs/README.md",
+    "SuperMe-policies/README.md",
+    "SuperMe-policies/policy-changelog.md",
+    "SuperMe-policies/project-policy.md"
+  ],
+  "schema_version": 1,
+  "source_commit": "9bddf30a27f9f959ff612a2633d00a536641b50b",
+  "source_dirty": false,
+  "source_repo": "C:\\Users\\zhanghangfan\\AppData\\Local\\Temp\\SuperMe-install-src",
+  "superme_version": "0.1.0",
+  "target": "C:\\Users\\zhanghangfan\\Documents\\github\\OpenClaudeScience",
+  "template_version": "0.1.0+9bddf30a27f9",
+  "updated_at": "2026-07-01T06:44:59+00:00"
+}

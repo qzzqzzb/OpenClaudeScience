@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenClaudeScience Review Subagent"
+  short_description: "Review implementation loops against the adapter contract and project policy"
+  default_prompt: "Use $review-pr-subagent to review the latest OpenClaudeScience implementation loop against the adapter contract and project policy."

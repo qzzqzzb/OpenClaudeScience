@@ -552,8 +552,9 @@ function Composer() {
         <button
           className="send-button"
           onClick={() => {
-            void sendMessage(text);
-            setText("");
+            void sendMessage(text).then((sent) => {
+              if (sent) setText("");
+            });
           }}
         >
           <Send size={18} />

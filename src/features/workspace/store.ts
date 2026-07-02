@@ -78,11 +78,11 @@ interface AppState {
   selectProject: (projectId: ProjectId) => Promise<void>;
   setSessionGroup: (group: SessionGroup) => Promise<void>;
   openSession: (sessionId: SessionId) => Promise<void>;
-  createSession: () => Promise<void>;
+  createSession: () => Promise<SessionSnapshot | undefined>;
   stopSession: () => Promise<void>;
   renameSession: (sessionId: SessionId, title: string) => Promise<void>;
   deleteSession: (sessionId: SessionId) => Promise<void>;
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (text: string) => Promise<boolean>;
   addPendingPart: (part: MessagePart) => void;
   attachUpload: (fileName: string) => Promise<void>;
   clearPendingParts: () => void;
@@ -120,6 +120,55 @@ const jobKey = (job: RemoteJob) => `${job.sessionId}:${job.jobId}`;
 function mergeById<T>(items: T[], item: T, idKey: keyof T) {
   const exists = items.some((entry) => entry[idKey] === item[idKey]);
   return exists ? items.map((entry) => (entry[idKey] === item[idKey] ? item : entry)) : [item, ...items];
+}
+
+function mergeMessages(items: Message[], incoming: Message[]) {
+  const byId = new Map(items.map((message) => [message.messageId, message]));
+  for (const rawMessage of incoming) {
+    const message = sanitizeMessage(rawMessage);
+    if (isEmptyUserMessage(message)) continue;
+    if (isDuplicateUserText([...byId.values()], message)) continue;
+    byId.set(message.messageId, message);
+  }
+  return [...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+function upsertMessage(items: Message[], message: Message) {
+  return mergeMessages(items, [message]);
+}
+
+function sanitizeMessage(message: Message): Message {
+  return {
+    ...message,
+    parts: message.parts.map((part) => {
+      if (part.type === "text") return { ...part, text: typeof part.text === "string" ? part.text : "" };
+      return part;
+    }),
+  };
+}
+
+function isDuplicateUserText(items: Message[], message: Message) {
+  if (message.role !== "user") return false;
+  const text = messageText(message);
+  if (!text) return false;
+  const createdAt = Date.parse(message.createdAt);
+  return items.some((item) => {
+    if (item.sessionId !== message.sessionId || item.role !== "user" || messageText(item) !== text) return false;
+    const itemCreatedAt = Date.parse(item.createdAt);
+    if (!Number.isFinite(createdAt) || !Number.isFinite(itemCreatedAt)) return true;
+    return Math.abs(createdAt - itemCreatedAt) < 10_000;
+  });
+}
+
+function isEmptyUserMessage(message: Message) {
+  return message.role === "user" && message.parts.every((part) => part.type !== "text" || part.text.trim() === "");
+}
+
+function messageText(message: Message) {
+  return message.parts
+    .filter((part): part is Extract<MessagePart, { type: "text" }> => part.type === "text")
+    .map((part) => part.text)
+    .join("\n");
 }
 
 function textPart(message: Message) {
@@ -222,7 +271,7 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
     const firstArtifact = artifacts[0];
     set((state) => ({
       activeSessionId: sessionId,
-      messages: { ...state.messages, [sessionId]: messages },
+      messages: { ...state.messages, [sessionId]: mergeMessages(state.messages[sessionId] ?? [], messages) },
       artifacts: { ...state.artifacts, [sessionId]: artifacts },
       tracks: { ...state.tracks, [sessionId]: tracks },
       activeArtifactId: firstArtifact?.id ?? state.activeArtifactId,
@@ -235,8 +284,17 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
 
   createSession: async () => {
     const projectId = get().currentProject?.projectId;
-    if (!projectId) return;
-    await adapterClient.commands.sessionCreate(projectId);
+    if (!projectId) return undefined;
+    const session = await adapterClient.resources.createSession(projectId);
+    set((state) => ({
+      sessions: mergeById(state.sessions, session, "sessionId"),
+      activeSessionId: session.sessionId,
+      messages: { ...state.messages, [session.sessionId]: state.messages[session.sessionId] ?? [] },
+      artifacts: { ...state.artifacts, [session.sessionId]: state.artifacts[session.sessionId] ?? [] },
+      tracks: { ...state.tracks, [session.sessionId]: state.tracks[session.sessionId] ?? [] },
+      leftMode: "sessions",
+    }));
+    return session;
   },
 
   stopSession: async () => {
@@ -257,8 +315,12 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
   },
 
   sendMessage: async (text) => {
-    const sessionId = get().activeSessionId;
-    if (!sessionId || (!text.trim() && get().pendingParts.length === 0)) return;
+    if (!text.trim() && get().pendingParts.length === 0) return false;
+    const sessionId = get().activeSessionId ?? (await get().createSession())?.sessionId;
+    if (!sessionId) {
+      get().showToast("Create a session before sending a message");
+      return false;
+    }
     const staged = Object.values(get().annotations).filter((annotation) => annotation.sessionId === sessionId && annotation.status === "staged");
     await adapterClient.commands.sessionSendMessage({
       sessionId,
@@ -266,6 +328,7 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
       annotationIds: staged.map((annotation) => annotation.annotationId),
     });
     set({ pendingParts: [] });
+    return true;
   },
 
   addPendingPart: (part) => set((state) => ({ pendingParts: [...state.pendingParts, part] })),
@@ -397,7 +460,7 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
   showSettings: () => set({ leftMode: "settings", inspectorMode: "settings" }),
 
   showToast: (text) => {
-    const id = `toast_${Date.now()}`;
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     set((state) => ({ toasts: [...state.toasts, { id, text }] }));
     window.setTimeout(() => get().dismissToast(id), 3600);
   },
@@ -413,7 +476,7 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
 
     const event = envelope;
     set((state) => ({
-      lastEventId: event.eventId,
+      lastEventId: event.eventId.startsWith("local_") ? state.lastEventId : event.eventId,
       eventLog: [...state.eventLog.slice(-32), event],
     }));
 
@@ -440,7 +503,7 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
         set((state) => ({
           messages: {
             ...state.messages,
-            [payload.message.sessionId]: [...(state.messages[payload.message.sessionId] ?? []), payload.message],
+            [payload.message.sessionId]: upsertMessage(state.messages[payload.message.sessionId] ?? [], payload.message),
           },
         }));
         break;
@@ -464,9 +527,11 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
         set((state) => ({
           messages: {
             ...state.messages,
-            [sessionId]: (state.messages[sessionId] ?? []).map((message) =>
-              message.messageId === payload.messageId ? { ...message, status: "completed" } : message,
-            ),
+            [sessionId]: payload.message
+              ? upsertMessage(state.messages[sessionId] ?? [], payload.message)
+              : (state.messages[sessionId] ?? []).map((message) =>
+                  message.messageId === payload.messageId ? { ...message, status: "completed" } : message,
+                ),
           },
         }));
         break;
