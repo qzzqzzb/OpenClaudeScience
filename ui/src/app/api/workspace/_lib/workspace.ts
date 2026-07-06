@@ -174,8 +174,20 @@ const MAX_WORKSPACE_FILE_SEARCH_LIMIT = 200;
 const MAX_WORKSPACE_FILE_SEARCH_DIRECTORIES = 10_000;
 const REMOTE_WORKSPACE_TIMEOUT_MS = 30_000;
 const REMOTE_WORKSPACE_MAX_BUFFER = 160 * 1024 * 1024;
+const WORKSPACE_DIRECTORY_LIST_CACHE_TTL_MS = 5_000;
 
 type WorkspaceBackend = "local_shell" | "ssh_shell";
+
+interface WorkspaceDirectoryListCacheEntry {
+  entries: WorkspaceEntry[];
+  expiresAt: number;
+  modifiedAtMs: number;
+}
+
+const workspaceDirectoryListCache = new Map<
+  string,
+  WorkspaceDirectoryListCacheEntry
+>();
 
 export interface ResourceRecord {
   id: string;
@@ -1763,37 +1775,75 @@ export async function listWorkspaceEntries(
     return payload.entries.map(withPreviewKind);
   }
 
-  const { root, absolutePath } = await resolveWorkspacePath(
+  const resolved = await resolveWorkspacePath(
     relativePath,
     resourceId,
     workspaceId
   );
+  return listLocalWorkspaceEntriesFromResolvedPath(resolved, resourceId, workspaceId);
+}
+
+export async function listLocalWorkspaceEntriesFromResolvedPath(
+  resolved: WorkspaceResolvedPath,
+  resourceId?: string | null,
+  workspaceId?: string | null
+): Promise<WorkspaceEntry[]> {
+  const { root, absolutePath, relativePath } = resolved;
+  const directoryStats = await fs.stat(absolutePath);
+  if (!directoryStats.isDirectory()) {
+    throw new Error("Selected workspace path is not a directory.");
+  }
+
+  const cacheKey = [
+    resourceId || "default",
+    workspaceId || "default",
+    relativePath,
+    absolutePath,
+  ].join("\u0000");
+  const now = Date.now();
+  const cached = workspaceDirectoryListCache.get(cacheKey);
+  if (
+    cached &&
+    cached.expiresAt > now &&
+    cached.modifiedAtMs === directoryStats.mtimeMs
+  ) {
+    return cached.entries;
+  }
+
   const dirents = await fs.readdir(absolutePath, { withFileTypes: true });
   const entries = await Promise.all(
     dirents
       .filter((dirent) => !isIgnoredEntry(dirent.name))
       .map(async (dirent) => {
         const entryAbsolutePath = path.join(absolutePath, dirent.name);
-        const stats = await fs.stat(entryAbsolutePath);
         const relativeEntryPath = toWorkspacePath(root, entryAbsolutePath);
         const extension = getFileExtension(dirent.name);
+        if (dirent.isDirectory()) {
+          return {
+            name: dirent.name,
+            path: relativeEntryPath,
+            kind: "directory",
+            extension: extension || undefined,
+            hasChildren: true,
+          } satisfies WorkspaceEntry;
+        }
+
+        const stats = await fs.stat(entryAbsolutePath);
 
         return {
           name: dirent.name,
           path: relativeEntryPath,
-          kind: dirent.isDirectory() ? "directory" : "file",
+          kind: "file",
           extension: extension || undefined,
-          size: dirent.isDirectory() ? undefined : stats.size,
+          size: stats.size,
           modifiedAt: stats.mtime.toISOString(),
-          hasChildren: dirent.isDirectory(),
-          previewKind: dirent.isDirectory()
-            ? undefined
-            : getPreviewKind(relativeEntryPath),
+          hasChildren: false,
+          previewKind: getPreviewKind(relativeEntryPath),
         } satisfies WorkspaceEntry;
       })
   );
 
-  return entries.sort((a, b) => {
+  const sortedEntries = entries.sort((a, b) => {
     if (a.kind !== b.kind) {
       return a.kind === "directory" ? -1 : 1;
     }
@@ -1802,6 +1852,12 @@ export async function listWorkspaceEntries(
       sensitivity: "base",
     });
   });
+  workspaceDirectoryListCache.set(cacheKey, {
+    entries: sortedEntries,
+    expiresAt: now + WORKSPACE_DIRECTORY_LIST_CACHE_TTL_MS,
+    modifiedAtMs: directoryStats.mtimeMs,
+  });
+  return sortedEntries;
 }
 
 export async function readWorkspaceFileData(

@@ -347,8 +347,10 @@ function ConfigPageContent() {
         ...DEFAULT_CONFIG,
         ...payload,
         openaiCompatibleApiKey: "",
+        // Keep Settings in the current browser language. The backend config
+        // language is only changed when the user explicitly saves Appearance.
+        language,
       } as ConfigResponse;
-      setLanguage(nextConfig.language);
       setConfig(nextConfig);
       setSavedConfig(nextConfig);
       setRequiresRestart(false);

@@ -1826,30 +1826,36 @@ function WorkbenchInspector({
         </button>
       </header>
 
-      {mode === "files" && (
-        <div className="ocs-inspector-content">
-          <InspectorFilesView
-            selectedFilePath={selectedFilePath}
-            resourceId={activeResource.id}
-            workspaceId={workspaceId}
-            refreshKey={workspaceRefreshKey}
-            onFileSelect={onFileSelect}
-          />
-        </div>
-      )}
+      <div
+        className={cn(
+          "ocs-inspector-content",
+          mode !== "files" && "hidden"
+        )}
+      >
+        <InspectorFilesView
+          selectedFilePath={selectedFilePath}
+          resourceId={activeResource.id}
+          workspaceId={workspaceId}
+          refreshKey={workspaceRefreshKey}
+          onFileSelect={onFileSelect}
+        />
+      </div>
 
-      {mode === "preview" && (
-        <div className="ocs-inspector-content ocs-inspector-preview">
-          <WorkspaceViewer
-            key={activeWorkspace?.id || activeResource.id}
-            selectedPath={selectedFilePath}
-            resourceId={activeResource.id}
-            workspaceId={workspaceId}
-            onClear={() => void onClearSelectedFile()}
-            onResolvedPath={handleResolvedFilePath}
-          />
-        </div>
-      )}
+      <div
+        className={cn(
+          "ocs-inspector-content ocs-inspector-preview",
+          mode !== "preview" && "hidden"
+        )}
+      >
+        <WorkspaceViewer
+          key={activeWorkspace?.id || activeResource.id}
+          selectedPath={selectedFilePath}
+          resourceId={activeResource.id}
+          workspaceId={workspaceId}
+          onClear={() => void onClearSelectedFile()}
+          onResolvedPath={handleResolvedFilePath}
+        />
+      </div>
 
     </aside>
   );
