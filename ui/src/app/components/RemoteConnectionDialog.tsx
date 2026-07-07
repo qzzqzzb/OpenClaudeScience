@@ -22,33 +22,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLanguage } from "@/app/hooks/useLanguage";
+import {
+  listRemoteSshHosts,
+  setupRemoteConnectionStream,
+  testRemoteConnection,
+  type ConnectionMode,
+  type RemoteConnectionTestResult,
+  type RemoteInstallMode,
+  type SshHostEntry,
+} from "@/app/services/remoteClient";
 import type { ResourceConfig } from "@/lib/config";
-
-type ConnectionMode = "sshConfig" | "sshCommand";
-type RemoteInstallMode = "auto" | "venv" | "pythonPath" | "conda";
-
-interface SshHostEntry {
-  host: string;
-  source: string;
-}
-
-interface TestResult {
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-}
-
-interface SetupResult {
-  resource: ResourceConfig;
-  resources: ResourceConfig[];
-  remoteUrl: string;
-  log: string[];
-}
-
-type SetupStreamEvent =
-  | { type: "log"; message?: string }
-  | { type: "done"; result?: SetupResult }
-  | { type: "error"; error?: string };
 
 interface RemoteConnectionDialogProps {
   open: boolean;
@@ -98,21 +81,15 @@ export function RemoteConnectionDialog({
   const [loadingHosts, setLoadingHosts] = useState(false);
   const [testing, setTesting] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
-  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testResult, setTestResult] =
+    useState<RemoteConnectionTestResult | null>(null);
   const [setupLog, setSetupLog] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setLoadingHosts(true);
-    fetch("/api/remote-connections/ssh-hosts", { cache: "no-store" })
-      .then(async (response) => {
-        const payload = (await response.json()) as {
-          hosts?: SshHostEntry[];
-          error?: string;
-        };
-        if (!response.ok) {
-          throw new Error(payload.error || t("sshHostReadFailed"));
-        }
+    listRemoteSshHosts(t("sshHostReadFailed"))
+      .then((payload) => {
         setHosts(payload.hosts || []);
       })
       .catch((error) => {
@@ -171,19 +148,14 @@ export function RemoteConnectionDialog({
     setTesting(true);
     setTestResult(null);
     try {
-      const response = await fetch("/api/remote-connections/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          connectionMode,
-          host: connectionMode === "sshConfig" ? selectedHost : undefined,
-          sshCommand: connectionMode === "sshCommand" ? sshCommand : undefined,
-        }),
+      const { responseOk, result } = await testRemoteConnection({
+        connectionMode,
+        host: connectionMode === "sshConfig" ? selectedHost : undefined,
+        sshCommand: connectionMode === "sshCommand" ? sshCommand : undefined,
       });
-      const payload = (await response.json()) as TestResult;
-      setTestResult(payload);
-      if (!response.ok || !payload.ok) {
-        throw new Error(payload.stderr || t("sshConnectionFailed"));
+      setTestResult(result);
+      if (!responseOk || !result.ok) {
+        throw new Error(result.stderr || t("sshConnectionFailed"));
       }
       toast.success(t("sshConnectionReady"));
     } catch (error) {
@@ -201,81 +173,25 @@ export function RemoteConnectionDialog({
     setSetupLog([]);
     try {
       const port = Number.parseInt(localPort, 10);
-      const response = await fetch("/api/remote-connections/setup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          connectionMode,
-          host: connectionMode === "sshConfig" ? selectedHost : undefined,
-          sshCommand: connectionMode === "sshCommand" ? sshCommand : undefined,
-          label,
-          workspace,
-          localPort: Number.isFinite(port) && port > 0 ? port : undefined,
-          installMode,
-          pythonPath: pythonPath.trim() || undefined,
-          condaCommand: condaCommand.trim() || undefined,
-        }),
+      const setupResult = await setupRemoteConnectionStream({
+        connectionMode,
+        host: connectionMode === "sshConfig" ? selectedHost : undefined,
+        sshCommand: connectionMode === "sshCommand" ? sshCommand : undefined,
+        label,
+        workspace,
+        localPort: Number.isFinite(port) && port > 0 ? port : undefined,
+        installMode,
+        pythonPath: pythonPath.trim() || undefined,
+        condaCommand: condaCommand.trim() || undefined,
+        messages: {
+          failed: t("remoteSetupFailed"),
+          noLog: t("remoteSetupNoLog"),
+          noResult: t("remoteSetupNoResult"),
+        },
+        onLog(message) {
+          setSetupLog((log) => [...log, message]);
+        },
       });
-      const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("application/x-ndjson")) {
-        const payload = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(payload?.error || t("remoteSetupFailed"));
-      }
-
-      if (!response.body) {
-        throw new Error(t("remoteSetupNoLog"));
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let result: SetupResult | null = null;
-      let streamError: string | null = null;
-
-      const parseLine = (line: string): SetupStreamEvent | null => {
-        const trimmed = line.trim();
-        return trimmed ? (JSON.parse(trimmed) as SetupStreamEvent) : null;
-      };
-
-      while (true) {
-        const { value, done } = await reader.read();
-        buffer += decoder.decode(value, { stream: !done });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          const event = parseLine(line);
-          if (!event) {
-            continue;
-          }
-          if (event.type === "log" && event.message) {
-            setSetupLog((log) => [...log, event.message as string]);
-          } else if (event.type === "done" && event.result) {
-            result = event.result;
-          } else if (event.type === "error") {
-            streamError = event.error || t("remoteSetupFailed");
-          }
-        }
-        if (done) break;
-      }
-      const lastEvent = parseLine(buffer);
-      if (lastEvent?.type === "log" && lastEvent.message) {
-        setSetupLog((log) => [...log, lastEvent.message as string]);
-      } else if (lastEvent?.type === "done" && lastEvent.result) {
-        result = lastEvent.result;
-      } else if (lastEvent?.type === "error") {
-        streamError = lastEvent.error || t("remoteSetupFailed");
-      }
-
-      if (streamError) {
-        throw new Error(streamError);
-      }
-      const setupResult = result;
-      if (!setupResult) {
-        throw new Error(t("remoteSetupNoResult"));
-      }
-
       setSetupLog(setupResult.log || []);
       await onConfigured(setupResult.resource, setupResult.resources);
       toast.success(

@@ -77,13 +77,16 @@ import {
   type WorkspaceFileDragPayload,
 } from "@/app/utils/workspaceDrag";
 import { normalizeWorkspacePreviewPath } from "@/app/utils/workspacePathLinks";
-import type { SkillEntry, SkillsConfigResponse } from "@/app/skills/types";
+import type { SkillEntry } from "@/app/skills/types";
 import { useThreads, type ThreadItem } from "@/app/hooks/useThreads";
-import type {
-  WorkspaceEntry,
-  WorkspaceSearchResponse,
-} from "@/app/types/workspace";
+import type { WorkspaceEntry } from "@/app/types/workspace";
 import type { CopyKey } from "@/lib/i18n";
+import {
+  getWorkspaceRawFileBlob,
+  searchWorkspace,
+  uploadWorkspaceAttachment,
+} from "@/app/services/workspaceClient";
+import { loadSkills } from "@/app/services/skillsClient";
 
 interface ChatInterfaceProps {
   assistant: Assistant | null;
@@ -630,20 +633,10 @@ async function uploadBinaryAttachment(
     form.set("threadId", context.threadId);
   }
 
-  const response = await fetch("/api/workspace/attachments", {
-    method: "POST",
-    body: form,
+  return uploadWorkspaceAttachment<Partial<ChatAttachment>>({
+    form,
+    fallbackMessage: copy.uploadFailed,
   });
-  const payload = (await parsePdfUploadResponse(response, copy)) as {
-    attachment?: Partial<ChatAttachment>;
-    error?: string;
-  };
-  if (!response.ok || !payload.attachment) {
-    throw new Error(
-      payload.error || `${copy.uploadFailed} (${response.status})`
-    );
-  }
-  return payload.attachment;
 }
 
 async function uploadWorkspaceOfficeAttachment(
@@ -665,39 +658,10 @@ async function uploadWorkspaceOfficeAttachment(
     form.set("threadId", context.threadId);
   }
 
-  const response = await fetch("/api/workspace/attachments", {
-    method: "POST",
-    body: form,
+  return uploadWorkspaceAttachment<Partial<ChatAttachment>>({
+    form,
+    fallbackMessage: copy.uploadFailed,
   });
-  const responsePayload = (await parsePdfUploadResponse(response, copy)) as {
-    attachment?: Partial<ChatAttachment>;
-    error?: string;
-  };
-  if (!response.ok || !responsePayload.attachment) {
-    throw new Error(
-      responsePayload.error || `${copy.uploadFailed} (${response.status})`
-    );
-  }
-  return responsePayload.attachment;
-}
-
-async function parsePdfUploadResponse(
-  response: Response,
-  copy: AttachmentCopy
-): Promise<unknown> {
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    try {
-      return await response.json();
-    } catch {
-      return {};
-    }
-  }
-
-  const text = (await response.text().catch(() => "")).trim();
-  return {
-    error: text && text !== "Internal Server Error" ? text : copy.uploadFailed,
-  };
 }
 
 function writeTextToClipboardFallback(text: string): void {
@@ -889,27 +853,14 @@ async function workspaceDragPayloadToFile(
   context: AttachmentUploadContext,
   readFailedMessage: string
 ): Promise<File> {
-  const params = new URLSearchParams({ path: payload.path });
   const effectiveResourceId = payload.resourceId || context.resourceId;
   const effectiveWorkspaceId = payload.workspaceId || context.workspaceId;
-  if (effectiveResourceId) {
-    params.set("resourceId", effectiveResourceId);
-  }
-  if (effectiveWorkspaceId) {
-    params.set("workspaceId", effectiveWorkspaceId);
-  }
-
-  const response = await fetch(`/api/workspace/file/raw?${params.toString()}`, {
-    cache: "no-store",
+  const blob = await getWorkspaceRawFileBlob({
+    path: payload.path,
+    resourceId: effectiveResourceId,
+    workspaceId: effectiveWorkspaceId,
+    fallbackMessage: readFailedMessage,
   });
-  if (!response.ok) {
-    const errorPayload = (await response.json().catch(() => ({}))) as {
-      error?: string;
-    };
-    throw new Error(errorPayload.error || readFailedMessage);
-  }
-
-  const blob = await response.blob();
   const fileName = payload.name || payload.path.split("/").pop() || "file";
   return new File([blob], fileName, {
     type: blob.type || "application/octet-stream",
@@ -1357,35 +1308,21 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(
       }
 
       const controller = new AbortController();
-      const params = new URLSearchParams({
-        query: mentionQuery,
-        limit: String(MAX_MENTION_WORKSPACE_FILE_RESULTS),
-      });
-      if (resourceId) {
-        params.set("resourceId", resourceId);
-      }
-      if (workspaceId) {
-        params.set("workspaceId", workspaceId);
-      }
 
       setMentionWorkspaceFilesLoading(true);
       setMentionWorkspaceFilesError(null);
 
-      fetch(`/api/workspace/search?${params.toString()}`, {
-        cache: "no-store",
+      searchWorkspace({
+        query: mentionQuery,
+        limit: MAX_MENTION_WORKSPACE_FILE_RESULTS,
+        resourceId,
+        workspaceId,
         signal: controller.signal,
+        fallbackMessage: t("projectFilesLoadFailed"),
       })
-        .then(async (response) => {
-          const payload = (await response.json().catch(() => null)) as
-            | (Partial<WorkspaceSearchResponse> & { error?: string })
-            | null;
-
-          if (!response.ok) {
-            throw new Error(payload?.error || t("projectFilesLoadFailed"));
-          }
-
+        .then((payload) => {
           setMentionWorkspaceFiles(
-            Array.isArray(payload?.entries) ? payload.entries : []
+            Array.isArray(payload.entries) ? payload.entries : []
           );
         })
         .catch((searchError) => {
@@ -1689,16 +1626,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(
       setMentionSkillsLoading(true);
       setMentionSkillsError(null);
       try {
-        const response = await fetch("/api/skills", { cache: "no-store" });
-        const payload =
-          (await response.json()) as Partial<SkillsConfigResponse> & {
-            error?: string;
-          };
-
-        if (!response.ok) {
-          throw new Error(payload.error || t("capabilityListLoadFailed"));
-        }
-
+        const payload = await loadSkills(t("capabilityListLoadFailed"));
         setMentionSkills(Array.isArray(payload.skills) ? payload.skills : []);
         setMentionSkillsLoaded(true);
       } catch (loadError) {
@@ -1799,16 +1727,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(
       let cancelled = false;
       const enableSkill = async () => {
         try {
-          const response = await fetch("/api/skills", { cache: "no-store" });
-          const payload =
-            (await response.json()) as Partial<SkillsConfigResponse> & {
-              error?: string;
-            };
-
-          if (!response.ok) {
-            throw new Error(payload.error || t("capabilityListLoadFailed"));
-          }
-
+          const payload = await loadSkills(t("capabilityListLoadFailed"));
           const skill = (payload.skills ?? []).find((candidate) =>
             skillMatchesIdentifier(candidate, skillIdentifier)
           );

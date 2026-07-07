@@ -16,28 +16,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { RemoteConnectionDialog } from "@/app/components/RemoteConnectionDialog";
 import { useLanguage } from "@/app/hooks/useLanguage";
+import { ensureRemoteConnectionStream } from "@/app/services/remoteClient";
+import { listResources } from "@/app/services/resourcesClient";
 import type { ResourceConfig } from "@/lib/config";
 import { cn } from "@/lib/utils";
-
-interface ResourcesPayload {
-  defaultResourceId?: string;
-  resources?: ResourceConfig[];
-  error?: string;
-}
-
-interface RemoteEnsureResult {
-  resource: ResourceConfig;
-  resources: ResourceConfig[];
-  remoteUrl: string;
-  state: "up-to-date" | "updated";
-  targetReleaseTag: string;
-  log: string[];
-}
-
-type RemoteEnsureStreamEvent =
-  | { type: "log"; message?: string }
-  | { type: "done"; result?: RemoteEnsureResult }
-  | { type: "error"; error?: string };
 
 type ResourceStatus =
   | { state: "idle"; message?: string }
@@ -57,96 +39,6 @@ function workbenchHref(resource: ResourceConfig) {
   return `/?${params.toString()}`;
 }
 
-async function readResources(
-  fallbackMessage: string
-): Promise<ResourcesPayload> {
-  const response = await fetch("/api/resources", { cache: "no-store" });
-  const payload = (await response.json().catch(() => ({}))) as ResourcesPayload;
-  if (!response.ok) {
-    throw new Error(payload.error || fallbackMessage);
-  }
-  return payload;
-}
-
-async function readRemoteEnsureStream(
-  resourceId: string,
-  onLog: (message: string) => void,
-  messages: {
-    failed: string;
-    noLog: string;
-    noResult: string;
-  }
-): Promise<RemoteEnsureResult> {
-  const response = await fetch("/api/remote-connections/ensure", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resourceId }),
-  });
-  const contentType = response.headers.get("content-type") || "";
-  if (!contentType.includes("application/x-ndjson")) {
-    const payload = (await response.json().catch(() => null)) as {
-      error?: string;
-    } | null;
-    throw new Error(payload?.error || messages.failed);
-  }
-  if (!response.body) {
-    throw new Error(messages.noLog);
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let result: RemoteEnsureResult | null = null;
-  let streamError: string | null = null;
-
-  const parseLine = (line: string): RemoteEnsureStreamEvent | null => {
-    const trimmed = line.trim();
-    return trimmed ? (JSON.parse(trimmed) as RemoteEnsureStreamEvent) : null;
-  };
-
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-    for (const line of lines) {
-      const event = parseLine(line);
-      if (!event) {
-        continue;
-      }
-      if (event.type === "log" && event.message) {
-        onLog(event.message);
-      } else if (event.type === "done" && event.result) {
-        result = event.result;
-      } else if (event.type === "error") {
-        streamError = event.error || messages.failed;
-      }
-    }
-    if (done) {
-      break;
-    }
-  }
-
-  if (buffer.trim()) {
-    const event = parseLine(buffer);
-    if (event?.type === "log" && event.message) {
-      onLog(event.message);
-    } else if (event?.type === "done" && event.result) {
-      result = event.result;
-    } else if (event?.type === "error") {
-      streamError = event.error || messages.failed;
-    }
-  }
-
-  if (streamError) {
-    throw new Error(streamError);
-  }
-  if (!result) {
-    throw new Error(messages.noResult);
-  }
-  return result;
-}
-
 export function RemoteProjectsSettingsCard() {
   const { t } = useLanguage();
   const [resources, setResources] = useState<ResourceConfig[]>([]);
@@ -164,7 +56,7 @@ export function RemoteProjectsSettingsCard() {
   const loadResources = useCallback(async () => {
     setRefreshing(true);
     try {
-      const payload = await readResources(t("remoteProjectsLoadFailed"));
+      const payload = await listResources(t("remoteProjectsLoadFailed"));
       setResources(payload.resources || []);
       setDefaultResourceId(payload.defaultResourceId || "local");
     } catch (error) {
@@ -205,20 +97,20 @@ export function RemoteProjectsSettingsCard() {
         },
       }));
       try {
-        const result = await readRemoteEnsureStream(
-          resource.id,
-          (message) => {
+        const result = await ensureRemoteConnectionStream({
+          resourceId: resource.id,
+          onLog(message) {
             setStatuses((current) => ({
               ...current,
               [resource.id]: { state: "checking", message },
             }));
           },
-          {
+          messages: {
             failed: t("remoteProjectSyncFailed"),
             noLog: t("remoteProjectSyncNoLog"),
             noResult: t("remoteProjectSyncNoResult"),
-          }
-        );
+          },
+        });
         setResources(result.resources);
         setStatuses((current) => ({
           ...current,

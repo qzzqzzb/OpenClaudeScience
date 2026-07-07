@@ -27,6 +27,10 @@ import type {
   WorkspaceOfficePreviewBlock,
 } from "@/app/types/workspace";
 import { useLanguage } from "@/app/hooks/useLanguage";
+import {
+  getWorkspaceFile,
+  openWorkspaceFile,
+} from "@/app/services/workspaceClient";
 
 interface WorkspaceViewerProps {
   selectedPath?: string | null;
@@ -90,28 +94,6 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-async function fetchWorkspaceFile(
-  path: string,
-  resourceId?: string,
-  workspaceId?: string
-): Promise<WorkspaceFileResponse> {
-  const params = new URLSearchParams({ path });
-  if (resourceId) {
-    params.set("resourceId", resourceId);
-  }
-  if (workspaceId) {
-    params.set("workspaceId", workspaceId);
-  }
-  const response = await fetch(`/api/workspace/file?${params.toString()}`);
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.error || "Unable to load file.");
-  }
-
-  return response.json();
 }
 
 function EmptyViewer() {
@@ -407,7 +389,12 @@ export function WorkspaceViewer({
     setIsLoading(true);
     setError(null);
 
-    fetchWorkspaceFile(selectedPath, resourceId, workspaceId)
+    getWorkspaceFile({
+      path: selectedPath,
+      resourceId,
+      workspaceId,
+      fallbackMessage: t("unableToLoadFile"),
+    })
       .then((payload) => {
         if (!isCancelled) {
           setFile(payload);
@@ -444,21 +431,12 @@ export function WorkspaceViewer({
 
     setIsOpeningFile(true);
     try {
-      const response = await fetch("/api/workspace/open-file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path: file.path,
-          resourceId,
-          workspaceId,
-        }),
+      await openWorkspaceFile({
+        path: file.path,
+        resourceId,
+        workspaceId,
+        fallbackMessage: t("unableToOpenLocalFile"),
       });
-      const payload = (await response.json().catch(() => ({}))) as {
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(payload.error || t("unableToOpenLocalFile"));
-      }
     } catch (openError) {
       const message =
         openError instanceof Error

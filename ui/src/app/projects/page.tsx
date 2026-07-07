@@ -31,39 +31,16 @@ import {
   projectsHrefFromSearchParams,
 } from "@/app/utils/navigationContext";
 import { useLanguage } from "@/app/hooks/useLanguage";
+import {
+  listWorkspaces,
+  pickWorkspace as pickWorkspaceRequest,
+  removeWorkspace as removeWorkspaceRequest,
+  updateWorkspace as updateWorkspaceRequest,
+} from "@/app/services/workspacesClient";
+import { shouldOpenOnboarding } from "@/app/services/configClient";
 import { getConfig } from "@/lib/config";
 
-interface WorkspacesPayload {
-  cancelled?: boolean;
-  defaultWorkspaceId?: string;
-  workspaceId?: string;
-  workspacePath?: string;
-  workspaces?: LocalWorkspace[];
-  error?: string;
-}
-
 type WorkspaceUpdateAction = "save" | "refresh" | "choose";
-
-interface RuntimeConfigStatus {
-  desktopMode?: boolean;
-  needsOnboarding?: boolean;
-}
-
-async function shouldOpenInitialConfig(): Promise<boolean> {
-  try {
-    const response = await fetch("/api/config", { cache: "no-store" });
-    const payload = (await response
-      .json()
-      .catch(() => null)) as RuntimeConfigStatus | null;
-    return (
-      response.ok &&
-      payload?.desktopMode === true &&
-      payload?.needsOnboarding === true
-    );
-  } catch {
-    return false;
-  }
-}
 
 function compactPath(value: string) {
   if (!value) return "-";
@@ -126,11 +103,7 @@ function ProjectsPageContent() {
   const loadWorkspaces = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/workspaces", { cache: "no-store" });
-      const payload = (await response.json()) as WorkspacesPayload;
-      if (!response.ok) {
-        throw new Error(payload.error || t("projectListReadFailed"));
-      }
+      const payload = await listWorkspaces(t("projectListReadFailed"));
       setWorkspaces(payload.workspaces || []);
     } catch (error) {
       const message =
@@ -144,11 +117,7 @@ function ProjectsPageContent() {
   const pickWorkspace = useCallback(async () => {
     setPicking(true);
     try {
-      const response = await fetch("/api/workspaces", { method: "POST" });
-      const payload = (await response.json()) as WorkspacesPayload;
-      if (!response.ok) {
-        throw new Error(payload.error || t("projectPickFailed"));
-      }
+      const payload = await pickWorkspaceRequest(t("projectPickFailed"));
       if (payload.cancelled) {
         return;
       }
@@ -179,14 +148,10 @@ function ProjectsPageContent() {
 
       setRemovingWorkspaceId(workspace.id);
       try {
-        const response = await fetch(
-          `/api/workspaces?id=${encodeURIComponent(workspace.id)}`,
-          { method: "DELETE" }
+        const payload = await removeWorkspaceRequest(
+          workspace.id,
+          t("removeProjectFailed")
         );
-        const payload = (await response.json()) as WorkspacesPayload;
-        if (!response.ok) {
-          throw new Error(payload.error || t("removeProjectFailed"));
-        }
         setWorkspaces(payload.workspaces || []);
         toast.success(t("removeProjectSuccess"));
       } catch (error) {
@@ -213,18 +178,13 @@ function ProjectsPageContent() {
     ) => {
       setUpdatingWorkspaceAction(action);
       try {
-        const response = await fetch("/api/workspaces", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const payload = await updateWorkspaceRequest(
+          {
             workspaceId: workspace.id,
             ...body,
-          }),
-        });
-        const payload = (await response.json()) as WorkspacesPayload;
-        if (!response.ok) {
-          throw new Error(payload.error || t("projectUpdateFailed"));
-        }
+          },
+          t("projectUpdateFailed")
+        );
         if (payload.cancelled) {
           return;
         }
@@ -249,7 +209,7 @@ function ProjectsPageContent() {
     let cancelled = false;
 
     async function initialize() {
-      if (await shouldOpenInitialConfig()) {
+      if (await shouldOpenOnboarding()) {
         if (!cancelled) {
           router.replace(initialConfigHref);
         }

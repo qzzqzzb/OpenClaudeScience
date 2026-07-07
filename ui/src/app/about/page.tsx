@@ -16,72 +16,14 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/app/hooks/useLanguage";
+import {
+  applyUpdate,
+  checkUpdate,
+  getUpdateStatus,
+  rollbackUpdate,
+  type UpdateStatusResult,
+} from "@/app/services/updateClient";
 import { workbenchHrefFromSearchParams } from "@/app/utils/navigationContext";
-
-type UpdateState =
-  | "idle"
-  | "checking"
-  | "available"
-  | "up-to-date"
-  | "downloading"
-  | "applying"
-  | "applied"
-  | "rolling-back"
-  | "rolled-back"
-  | "failed";
-
-interface UpdateStatusResult {
-  state: UpdateState;
-  sourceRepo: string;
-  sourceUrl: string;
-  current: {
-    version: string;
-    exactTag?: string;
-    branch?: string;
-    commit?: string;
-    dirty: boolean;
-    dirtyReason?: string;
-    appPath?: string;
-    installMode: "desktop-app" | "source";
-  };
-  latest?: {
-    tagName: string;
-    name: string;
-    htmlUrl: string;
-    publishedAt?: string;
-    notes?: string;
-    asset?: {
-      name: string;
-      size?: number;
-      downloadUrl: string;
-    };
-  };
-  updateAvailable: boolean;
-  canApply: boolean;
-  blockReason?: string;
-  message: string;
-  previous?: {
-    checkoutTarget: string;
-    commit: string;
-    label: string;
-  };
-  download?: {
-    assetName: string;
-    downloadedBytes: number;
-    totalBytes?: number;
-    percent?: number;
-    startedAt: string;
-    updatedAt: string;
-  };
-  backendRestart?: {
-    message: string;
-  };
-  installLogPath?: string;
-  log: Array<{
-    at: string;
-    message: string;
-  }>;
-}
 
 function formatBytes(value: number) {
   if (!Number.isFinite(value) || value <= 0) {
@@ -162,17 +104,7 @@ function AboutPageContent() {
         setError(null);
       }
       try {
-        const response = await fetch("/api/update/status", {
-          cache: "no-store",
-        });
-        const payload = (await response.json()) as UpdateStatusResult & {
-          error?: string;
-        };
-        if (!response.ok) {
-          throw new Error(
-            payload.error || payload.message || t("updateStatusReadFailed")
-          );
-        }
+        const payload = await getUpdateStatus(t("updateStatusReadFailed"));
         setUpdateStatus(payload);
       } catch (statusError) {
         const message =
@@ -196,14 +128,9 @@ function AboutPageContent() {
     setCheckingUpdate(true);
     setError(null);
     try {
-      const response = await fetch("/api/update/check", {
-        method: "POST",
-      });
-      const payload = (await response.json()) as UpdateStatusResult & {
-        error?: string;
-      };
+      const { responseOk, status: payload } = await checkUpdate();
       setUpdateStatus(payload);
-      if (!response.ok) {
+      if (!responseOk) {
         throw new Error(
           payload.error || payload.message || t("checkUpdateFailed")
         );
@@ -241,14 +168,9 @@ function AboutPageContent() {
     setApplyingUpdate(true);
     setError(null);
     try {
-      const response = await fetch("/api/update/apply", {
-        method: "POST",
-      });
-      const payload = (await response.json()) as UpdateStatusResult & {
-        error?: string;
-      };
+      const { responseOk, status: payload } = await applyUpdate();
       setUpdateStatus(payload);
-      if (!response.ok) {
+      if (!responseOk) {
         throw new Error(payload.error || payload.message || t("updateFailed"));
       }
       toast.success(payload.message);
@@ -285,14 +207,9 @@ function AboutPageContent() {
     setRollingBackUpdate(true);
     setError(null);
     try {
-      const response = await fetch("/api/update/rollback", {
-        method: "POST",
-      });
-      const payload = (await response.json()) as UpdateStatusResult & {
-        error?: string;
-      };
+      const { responseOk, status: payload } = await rollbackUpdate();
       setUpdateStatus(payload);
-      if (!response.ok) {
+      if (!responseOk) {
         throw new Error(
           payload.error || payload.message || t("rollbackFailed")
         );

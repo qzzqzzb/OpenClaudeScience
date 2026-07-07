@@ -1,34 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  WorkspaceEntry,
-  WorkspaceListResponse,
-} from "@/app/types/workspace";
+import { listWorkspaceFiles } from "@/app/services/workspaceClient";
+import type { WorkspaceEntry } from "@/app/types/workspace";
 
 type DirectoryEntries = Record<string, WorkspaceEntry[]>;
-
-async function fetchDirectory(
-  path: string,
-  resourceId?: string,
-  workspaceId?: string
-): Promise<WorkspaceListResponse> {
-  const params = new URLSearchParams({ path });
-  if (resourceId) {
-    params.set("resourceId", resourceId);
-  }
-  if (workspaceId) {
-    params.set("workspaceId", workspaceId);
-  }
-  const response = await fetch(`/api/workspace/files?${params.toString()}`);
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.error || "项目文件加载失败。");
-  }
-
-  return response.json();
-}
+const LOAD_WORKSPACE_FILES_ERROR = "项目文件加载失败。";
 
 export function useWorkspaceFiles(
   resourceId?: string,
@@ -67,14 +44,21 @@ export function useWorkspaceFiles(
       setError(null);
 
       try {
-        const payload = await fetchDirectory(path, resourceId, workspaceId);
+        const payload = await listWorkspaceFiles({
+          path,
+          resourceId,
+          workspaceId,
+          fallbackMessage: LOAD_WORKSPACE_FILES_ERROR,
+        });
         setDirectories((current) => ({
           ...current,
           [payload.path]: payload.entries,
         }));
         return payload.entries;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "项目文件加载失败。");
+        setError(
+          err instanceof Error ? err.message : LOAD_WORKSPACE_FILES_ERROR
+        );
         return [];
       } finally {
         setPathLoading(path, false);
@@ -116,7 +100,12 @@ export function useWorkspaceFiles(
       try {
         const payloads = await Promise.all(
           uniquePaths.map((path) =>
-            fetchDirectory(path, resourceId, workspaceId)
+            listWorkspaceFiles({
+              path,
+              resourceId,
+              workspaceId,
+              fallbackMessage: LOAD_WORKSPACE_FILES_ERROR,
+            })
           )
         );
 
@@ -128,7 +117,9 @@ export function useWorkspaceFiles(
           return next;
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "项目文件加载失败。");
+        setError(
+          err instanceof Error ? err.message : LOAD_WORKSPACE_FILES_ERROR
+        );
       } finally {
         uniquePaths.forEach((path) => setPathLoading(path, false));
       }
@@ -150,7 +141,12 @@ export function useWorkspaceFiles(
     setPathLoading("", true);
     setError(null);
 
-    fetchDirectory("", resourceId, workspaceId)
+    listWorkspaceFiles({
+      path: "",
+      resourceId,
+      workspaceId,
+      fallbackMessage: LOAD_WORKSPACE_FILES_ERROR,
+    })
       .then((payload) => {
         if (!isCancelled) {
           setDirectories({ [payload.path]: payload.entries });
@@ -158,7 +154,9 @@ export function useWorkspaceFiles(
       })
       .catch((err) => {
         if (!isCancelled) {
-          setError(err instanceof Error ? err.message : "项目文件加载失败。");
+          setError(
+            err instanceof Error ? err.message : LOAD_WORKSPACE_FILES_ERROR
+          );
         }
       })
       .finally(() => {

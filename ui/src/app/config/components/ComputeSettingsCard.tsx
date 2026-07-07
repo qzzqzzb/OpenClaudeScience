@@ -16,48 +16,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/app/hooks/useLanguage";
+import {
+  addSshComputeHost,
+  listSshComputeHosts,
+  type SshComputeHost,
+} from "@/app/services/computeClient";
+import {
+  listRemoteSshHosts,
+  type SshHostEntry,
+} from "@/app/services/remoteClient";
 import { cn } from "@/lib/utils";
-
-interface SshComputeProbe {
-  ok: boolean;
-  checkedAt: string;
-  os?: string;
-  kernel?: string;
-  arch?: string;
-  user?: string;
-  host?: string;
-  python?: string;
-  bash?: string;
-  workdir?: string;
-  error?: string;
-}
-
-interface SshComputeHost {
-  id: string;
-  label: string;
-  hostAlias?: string;
-  sshCommand: string;
-  scratchRoot: string;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-  probe?: SshComputeProbe;
-}
-
-interface SshConfigHostEntry {
-  host: string;
-  source: string;
-}
-
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  const payload = (await response.json().catch(() => ({}))) as T & {
-    error?: string;
-  };
-  if (!response.ok) {
-    throw new Error(payload.error || `Request failed with ${response.status}`);
-  }
-  return payload;
-}
 
 export function ComputeSettingsCard() {
   const { t } = useLanguage();
@@ -65,9 +33,7 @@ export function ComputeSettingsCard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [addingHost, setAddingHost] = useState(false);
-  const [sshConfigHosts, setSshConfigHosts] = useState<SshConfigHostEntry[]>(
-    []
-  );
+  const [sshConfigHosts, setSshConfigHosts] = useState<SshHostEntry[]>([]);
   const [sshConfigError, setSshConfigError] = useState<string | null>(null);
   const [hostAlias, setHostAlias] = useState("");
   const [hostNotes, setHostNotes] = useState("");
@@ -113,28 +79,31 @@ export function ComputeSettingsCard() {
   }
 
   async function refreshHosts() {
-    const [configResponse, computeResponse] = await Promise.all([
-      fetch("/api/remote-connections/ssh-hosts", { cache: "no-store" }),
-      fetch("/api/compute/ssh-hosts", { cache: "no-store" }),
+    const [configResult, computePayload] = await Promise.all([
+      listRemoteSshHosts(t("sshConfigUnreadable"))
+        .then((payload) => ({ ok: true as const, payload }))
+        .catch((configError) => ({
+          ok: false as const,
+          message:
+            configError instanceof Error
+              ? configError.message
+              : t("sshConfigUnreadable"),
+        })),
+      listSshComputeHosts(),
     ]);
-    if (configResponse.ok) {
-      const configPayload = (await configResponse.json()) as {
-        hosts: SshConfigHostEntry[];
-      };
-      setSshConfigHosts(configPayload.hosts);
+
+    if (configResult.ok) {
+      const configHosts = configResult.payload.hosts || [];
+      setSshConfigHosts(configHosts);
       setSshConfigError(null);
-      if (!hostAlias && configPayload.hosts[0]) {
-        setHostAlias(configPayload.hosts[0].host);
+      if (!hostAlias && configHosts[0]) {
+        setHostAlias(configHosts[0].host);
       }
     } else {
-      const payload = await configResponse.json().catch(() => ({}));
       setSshConfigHosts([]);
-      setSshConfigError(payload.error || t("sshConfigUnreadable"));
+      setSshConfigError(configResult.message);
     }
 
-    const computePayload = await readJsonResponse<{ hosts: SshComputeHost[] }>(
-      computeResponse
-    );
     setHosts(computePayload.hosts);
     if (!selectedHostId && computePayload.hosts[0]) {
       setSelectedHostId(computePayload.hosts[0].id);
@@ -165,17 +134,10 @@ export function ComputeSettingsCard() {
     setAddingHost(true);
     setError(null);
     try {
-      const response = await fetch("/api/compute/ssh-hosts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          host,
-          notes: hostNotes.trim() || undefined,
-        }),
+      const payload = await addSshComputeHost({
+        host,
+        notes: hostNotes.trim() || undefined,
       });
-      const payload = await readJsonResponse<{ host: SshComputeHost }>(
-        response
-      );
       setHosts((current) => [
         payload.host,
         ...current.filter((candidate) => candidate.id !== payload.host.id),

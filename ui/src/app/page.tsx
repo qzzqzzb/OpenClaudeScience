@@ -80,10 +80,56 @@ import {
 } from "@/app/utils/navigationContext";
 import { displayResourceLabel } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import {
+  shouldOpenOnboarding as shouldOpenOnboardingRequest,
+} from "@/app/services/configClient";
+import { listResources } from "@/app/services/resourcesClient";
+import {
+  isLocalBackendReady,
+  isLocalDeploymentUrl,
+} from "@/app/services/runtimeClient";
+import {
+  ensureRemoteConnectionStream,
+  pushBackendCliStream,
+} from "@/app/services/remoteClient";
+import {
+  listWorkspaces,
+  pickWorkspace as pickWorkspaceRequest,
+  setDefaultWorkspace,
+} from "@/app/services/workspacesClient";
 
 const OPEN_WORKSPACE_VALUE = "__open_workspace__";
 const ADD_REMOTE_WORKSPACE_VALUE = "__add_remote_workspace__";
 const NEW_THREAD_MARKER = "__new_thread__";
+const BACKEND_READY_CACHE_PREFIX = "internagents.backend.ready";
+const BACKEND_READY_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function backendReadyCacheKey(deploymentUrl: string): string {
+  return `${BACKEND_READY_CACHE_PREFIX}:${deploymentUrl}`;
+}
+
+function readBackendReadyCache(deploymentUrl: string): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const value = window.sessionStorage.getItem(
+    backendReadyCacheKey(deploymentUrl)
+  );
+  const timestamp = value ? Number.parseInt(value, 10) : 0;
+  return Number.isFinite(timestamp) && Date.now() - timestamp < BACKEND_READY_CACHE_TTL_MS;
+}
+
+function writeBackendReadyCache(deploymentUrl: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.setItem(
+    backendReadyCacheKey(deploymentUrl),
+    String(Date.now())
+  );
+}
 
 function formatConversationTabTime(date: Date, language: string): string {
   try {
@@ -94,66 +140,6 @@ function formatConversationTabTime(date: Date, language: string): string {
     }).format(date);
   } catch {
     return date.toTimeString().slice(0, 5);
-  }
-}
-
-interface BackendCliPushResult {
-  resource: ResourceConfig;
-  resources: ResourceConfig[];
-  remoteUrl: string;
-  backendCliFingerprint: string;
-  log: string[];
-}
-
-type BackendCliPushStreamEvent =
-  | { type: "log"; message?: string }
-  | { type: "done"; result?: BackendCliPushResult }
-  | { type: "error"; error?: string };
-
-interface RuntimeConfigStatus {
-  desktopMode?: boolean;
-  needsOnboarding?: boolean;
-}
-
-function isLocalDeploymentUrl(value: string): boolean {
-  try {
-    const hostname = new URL(value).hostname;
-    return (
-      hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1"
-    );
-  } catch {
-    return false;
-  }
-}
-
-async function isLocalBackendReady(deploymentUrl: string): Promise<boolean> {
-  try {
-    const params = new URLSearchParams({ url: deploymentUrl });
-    const response = await fetch(`/api/runtime/backend/ready?${params}`, {
-      cache: "no-store",
-    });
-    const payload = (await response.json().catch(() => null)) as {
-      ready?: boolean;
-    } | null;
-    return response.ok && payload?.ready === true;
-  } catch {
-    return false;
-  }
-}
-
-async function shouldOpenOnboarding(): Promise<boolean> {
-  try {
-    const response = await fetch("/api/config", { cache: "no-store" });
-    const payload = (await response
-      .json()
-      .catch(() => null)) as RuntimeConfigStatus | null;
-    return (
-      response.ok &&
-      payload?.desktopMode === true &&
-      payload?.needsOnboarding === true
-    );
-  } catch {
-    return false;
   }
 }
 
@@ -183,20 +169,6 @@ interface HomePageInnerProps {
     resources?: ResourceConfig[]
   ) => Promise<ResourceConfig[]>;
 }
-
-interface RemoteEnsureResult {
-  resource: ResourceConfig;
-  resources: ResourceConfig[];
-  remoteUrl: string;
-  state: "up-to-date" | "updated";
-  targetReleaseTag: string;
-  log: string[];
-}
-
-type RemoteEnsureStreamEvent =
-  | { type: "log"; message?: string }
-  | { type: "done"; result?: RemoteEnsureResult }
-  | { type: "error"; error?: string };
 
 function HomePageInner({
   config,
@@ -435,73 +407,19 @@ function HomePageInner({
     async (resourceId: string) => {
       const toastId = toast.loading(t("remoteRuntimeSyncing"));
       try {
-        const response = await fetch("/api/remote-connections/ensure", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ resourceId }),
+        const result = await ensureRemoteConnectionStream({
+          resourceId,
+          messages: {
+            failed: t("remoteRuntimeSyncFailed"),
+            noLog: t("remoteRuntimeNoLog"),
+            noResult: t("remoteRuntimeNoResult"),
+          },
+          onLog() {
+            // The workbench keeps this toast compact and only reports completion.
+          },
         });
-        const contentType = response.headers.get("content-type") || "";
-        if (!contentType.includes("application/x-ndjson")) {
-          const payload = (await response.json().catch(() => null)) as {
-            error?: string;
-          } | null;
-          toast.dismiss(toastId);
-          throw new Error(payload?.error || t("remoteRuntimeSyncFailed"));
-        }
-        if (!response.body) {
-          toast.dismiss(toastId);
-          throw new Error(t("remoteRuntimeNoLog"));
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let result: RemoteEnsureResult | null = null;
-        let streamError: string | null = null;
-
-        const parseLine = (line: string): RemoteEnsureStreamEvent | null => {
-          const trimmed = line.trim();
-          return trimmed
-            ? (JSON.parse(trimmed) as RemoteEnsureStreamEvent)
-            : null;
-        };
-
-        while (true) {
-          const { value, done } = await reader.read();
-          buffer += decoder.decode(value, { stream: !done });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-          for (const line of lines) {
-            const event = parseLine(line);
-            if (!event) {
-              continue;
-            }
-            if (event.type === "done" && event.result) {
-              result = event.result;
-            } else if (event.type === "error") {
-              streamError = event.error || t("remoteRuntimeSyncFailed");
-            }
-          }
-          if (done) break;
-        }
-
-        if (buffer.trim()) {
-          const event = parseLine(buffer);
-          if (event?.type === "done" && event.result) {
-            result = event.result;
-          } else if (event?.type === "error") {
-            streamError = event.error || t("remoteRuntimeSyncFailed");
-          }
-        }
 
         toast.dismiss(toastId);
-        if (streamError) {
-          throw new Error(streamError);
-        }
-        if (!result) {
-          throw new Error(t("remoteRuntimeNoResult"));
-        }
-
         await onResourcesRefresh(result.resources);
         toast.success(
           result.state === "updated"
@@ -667,68 +585,18 @@ function HomePageInner({
     setPushingBackendCli(true);
     const toastId = toast.loading("Pushing backend CLI...");
     try {
-      const response = await fetch("/api/remote-connections/push-backend-cli", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resourceId: activeResource.id, force: true }),
+      const result = await pushBackendCliStream({
+        resourceId: activeResource.id,
+        force: true,
+        messages: {
+          failed: "Backend CLI push failed.",
+          noLog: "Backend CLI push failed: no log stream returned.",
+          noResult: "Backend CLI push failed: completion event missing.",
+        },
+        onLog(message) {
+          toast.loading(message, { id: toastId });
+        },
       });
-      const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("application/x-ndjson")) {
-        const payload = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(payload?.error || "Backend CLI push failed.");
-      }
-      if (!response.body) {
-        throw new Error("Backend CLI push failed: no log stream returned.");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let result: BackendCliPushResult | null = null;
-      let streamError: string | null = null;
-
-      const parseLine = (line: string): BackendCliPushStreamEvent | null => {
-        const trimmed = line.trim();
-        return trimmed
-          ? (JSON.parse(trimmed) as BackendCliPushStreamEvent)
-          : null;
-      };
-
-      while (true) {
-        const { value, done } = await reader.read();
-        buffer += decoder.decode(value, { stream: !done });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          const event = parseLine(line);
-          if (event?.type === "log" && event.message) {
-            toast.loading(event.message, { id: toastId });
-          } else if (event?.type === "done" && event.result) {
-            result = event.result;
-          } else if (event?.type === "error") {
-            streamError = event.error || "Backend CLI push failed.";
-          }
-        }
-        if (done) break;
-      }
-
-      const lastEvent = parseLine(buffer);
-      if (lastEvent?.type === "log" && lastEvent.message) {
-        toast.loading(lastEvent.message, { id: toastId });
-      } else if (lastEvent?.type === "done" && lastEvent.result) {
-        result = lastEvent.result;
-      } else if (lastEvent?.type === "error") {
-        streamError = lastEvent.error || "Backend CLI push failed.";
-      }
-
-      if (streamError) {
-        throw new Error(streamError);
-      }
-      if (!result) {
-        throw new Error("Backend CLI push failed: completion event missing.");
-      }
 
       await onResourcesRefresh(result.resources);
       mutateThreads?.();
@@ -1885,15 +1753,7 @@ function HomePageContent() {
       let nextResources = knownResources;
       let defaultResourceId: string | undefined;
       if (!nextResources) {
-        const response = await fetch("/api/resources", { cache: "no-store" });
-        const payload = (await response.json()) as {
-          defaultResourceId?: string;
-          resources?: ResourceConfig[];
-          error?: string;
-        };
-        if (!response.ok) {
-          throw new Error(payload.error || t("projectListReadFailed"));
-        }
+        const payload = await listResources(t("projectListReadFailed"));
         nextResources = payload.resources || [];
         defaultResourceId = payload.defaultResourceId;
       }
@@ -1913,15 +1773,7 @@ function HomePageContent() {
   );
 
   const loadWorkspaces = useCallback(async () => {
-    const response = await fetch("/api/workspaces", { cache: "no-store" });
-    const payload = (await response.json()) as {
-      defaultWorkspaceId?: string;
-      workspaces?: LocalWorkspace[];
-      error?: string;
-    };
-    if (!response.ok) {
-      throw new Error(payload.error || t("projectReadFailed"));
-    }
+    const payload = await listWorkspaces(t("projectReadFailed"));
     const nextWorkspaces = payload.workspaces || [];
     setWorkspaces(nextWorkspaces);
     return nextWorkspaces;
@@ -1937,7 +1789,7 @@ function HomePageContent() {
 
       const initialConfig = getConfig();
       setConfig(initialConfig);
-      if (await shouldOpenOnboarding()) {
+      if (await shouldOpenOnboardingRequest()) {
         if (!cancelled) {
           window.location.href = "/config?onboarding=1";
         }
@@ -1997,11 +1849,13 @@ function HomePageContent() {
 
     let cancelled = false;
     let timeoutId = 0;
+    let hadCachedReady = readBackendReadyCache(deploymentUrl);
 
-    setLocalBackendReady(false);
+    setLocalBackendReady(hadCachedReady);
 
     const poll = async () => {
       if (await isLocalBackendReady(deploymentUrl)) {
+        writeBackendReadyCache(deploymentUrl);
         if (!cancelled) {
           setLocalBackendReady(true);
         }
@@ -2009,6 +1863,10 @@ function HomePageContent() {
       }
 
       if (!cancelled) {
+        if (hadCachedReady) {
+          hadCachedReady = false;
+          setLocalBackendReady(false);
+        }
         timeoutId = window.setTimeout(poll, 800);
       }
     };
@@ -2121,21 +1979,10 @@ function HomePageContent() {
           if (!workspace) {
             return;
           }
-          const response = await fetch("/api/workspaces", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              workspacePath: workspace.resolvedPath || workspace.path,
-            }),
-          });
-          const payload = (await response.json()) as {
-            defaultWorkspaceId?: string;
-            workspaces?: LocalWorkspace[];
-            error?: string;
-          };
-          if (!response.ok) {
-            throw new Error(payload.error || t("projectSwitchFailed"));
-          }
+          const payload = await setDefaultWorkspace(
+            workspace.resolvedPath || workspace.path,
+            t("projectSwitchFailed")
+          );
           if (payload.workspaces) {
             setWorkspaces(payload.workspaces);
           }
@@ -2143,19 +1990,7 @@ function HomePageContent() {
           await setWorkspaceId(payload.defaultWorkspaceId || nextWorkspaceId);
         }}
         onWorkspacePick={async () => {
-          const response = await fetch("/api/workspaces", {
-            method: "POST",
-          });
-          const payload = (await response.json()) as {
-            cancelled?: boolean;
-            defaultWorkspaceId?: string;
-            workspaceId?: string;
-            workspaces?: LocalWorkspace[];
-            error?: string;
-          };
-          if (!response.ok) {
-            throw new Error(payload.error || t("projectPickFailed"));
-          }
+          const payload = await pickWorkspaceRequest(t("projectPickFailed"));
           if (payload.cancelled) {
             return;
           }

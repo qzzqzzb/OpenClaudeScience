@@ -40,51 +40,19 @@ import { SkillsMarketplace } from "@/app/skills/components/SkillsMarketplace";
 import {
   appReturnHrefFromSearchParams,
 } from "@/app/utils/navigationContext";
-
-type AuthorizationMode = "auto" | "write" | "all";
-type ModelSelectionMode = "auto" | "manual";
-type ModelProvider = "openai_compatible";
-type OnboardingMissing = "openaiCompatibleApiKey";
-
-interface ConfigResponse {
-  configPath: string;
-  envPath: string;
-  modelProvider: ModelProvider;
-  model: string;
-  modelSelectionMode: ModelSelectionMode;
-  autoModel: string;
-  effectiveModel: string;
-  openaiCompatibleModel: string;
-  openaiCompatibleBaseUrl: string;
-  openaiCompatibleApiKey: string;
-  openaiCompatibleApiKeySet: boolean;
-  openaiCompatibleApiKeyPreview: string;
-  authorizationMode: AuthorizationMode;
-  language: UiLanguage;
-  desktopMode: boolean;
-  needsOnboarding: boolean;
-  onboardingSkipped: boolean;
-  missing: OnboardingMissing[];
-  workspaceError?: string;
-  message?: string;
-}
-
-interface BackendRestartResult {
-  status: "restarted" | "failed";
-  message: string;
-  url: string;
-  pid?: number;
-  oldPid?: number;
-  logPath: string;
-}
-
-interface BackendStatusResult {
-  status: "idle" | "busy" | "unavailable";
-  message: string;
-  url: string;
-  busyThreads: number;
-  interruptedThreads: number;
-}
+import {
+  loadConfig as loadConfigRequest,
+  saveConfig as saveConfigRequest,
+  type AuthorizationMode,
+  type ConfigResponse,
+} from "@/app/services/configClient";
+import {
+  getBackendStatus as getBackendStatusRequest,
+  isWorkbenchHomeReady,
+  restartBackend as restartBackendRequest,
+  type BackendRestartResult,
+  type BackendStatusResult,
+} from "@/app/services/runtimeClient";
 
 const DEFAULT_CONFIG: ConfigResponse = {
   configPath: "",
@@ -209,22 +177,16 @@ const SETTINGS_SECTIONS: Array<{
 ];
 
 async function waitForWorkbenchReady(url: string) {
-  const configUrl = new URL("/api/config", url).toString();
-
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
-      const [homeResponse, configResponse] = await Promise.all([
-        fetch(url, { cache: "no-store" }),
-        fetch(configUrl, { cache: "no-store" }),
+      const [homeResponse, configPayload] = await Promise.all([
+        isWorkbenchHomeReady(url),
+        loadConfigRequest<{ needsOnboarding?: boolean }>({ baseUrl: url }),
       ]);
-      const configPayload = (await configResponse
-        .json()
-        .catch(() => null)) as { needsOnboarding?: boolean } | null;
 
       if (
-        homeResponse.ok &&
-        configResponse.ok &&
-        configPayload?.needsOnboarding !== true
+        homeResponse &&
+        configPayload.needsOnboarding !== true
       ) {
         return true;
       }
@@ -338,11 +300,9 @@ function ConfigPageContent() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/config", { cache: "no-store" });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || t("configReadFailed"));
-      }
+      const payload = await loadConfigRequest<ConfigResponse>({
+        fallbackMessage: t("configReadFailed"),
+      });
       const nextConfig = {
         ...DEFAULT_CONFIG,
         ...payload,
@@ -380,10 +340,8 @@ function ConfigPageContent() {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch("/api/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const payload = await saveConfigRequest<ConfigResponse>(
+        {
           model: config.openaiCompatibleModel || "deepseek-v4-flash",
           modelProvider: "openai_compatible",
           modelSelectionMode: "manual",
@@ -395,12 +353,9 @@ function ConfigPageContent() {
           authorizationMode: config.authorizationMode,
           language: config.language,
           onboardingSkipped: options.onboardingSkipped === true,
-        }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || t("configSaveFailed"));
-      }
+        },
+        t("configSaveFailed")
+      );
       const nextConfig = {
         ...DEFAULT_CONFIG,
         ...payload,
@@ -453,10 +408,7 @@ function ConfigPageContent() {
   async function checkBackendStatus(): Promise<BackendStatusResult> {
     setCheckingStatus(true);
     try {
-      const response = await fetch("/api/runtime/backend/status", {
-        cache: "no-store",
-      });
-      const status = (await response.json()) as BackendStatusResult;
+      const status = await getBackendStatusRequest();
       setBackendStatus(status);
       return status;
     } finally {
@@ -492,14 +444,11 @@ function ConfigPageContent() {
     setRestarting(true);
     setError(null);
     try {
-      const response = await fetch("/api/runtime/backend/restart", {
-        method: "POST",
-      });
-      const restart = (await response.json()) as BackendRestartResult;
+      const restart = await restartBackendRequest();
       setRestartResult(restart);
       setRequiresRestart(restart.status !== "restarted");
 
-      if (!response.ok || restart.status !== "restarted") {
+      if (restart.status !== "restarted") {
         throw new Error(restart.message || t("applyConfigFailed"));
       }
 

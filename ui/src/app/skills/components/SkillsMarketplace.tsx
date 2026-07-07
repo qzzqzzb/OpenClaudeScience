@@ -54,14 +54,24 @@ import {
 } from "@/app/skills/skill-search";
 import { scienceSkillDisplayText } from "@/app/skills/science-skill-display";
 import type {
-  BackendRestartResult,
   BackendStatusResult,
-  ImportSkillsResponse,
   SkillEntry,
   SkillConnectionsResponse,
   SkillImportType,
   SkillsConfigResponse,
 } from "@/app/skills/types";
+import {
+  importSkills,
+  loadSkillConnections,
+  loadSkills as loadSkillsRequest,
+  pickLocalSkillFolder,
+  saveSkillConnections,
+  saveSkills as saveSkillsRequest,
+} from "@/app/services/skillsClient";
+import {
+  getBackendStatus,
+  restartBackend,
+} from "@/app/services/runtimeClient";
 
 const CHAT_COMPOSER_HASH = "chat-composer";
 const ENABLE_SKILL_QUERY_KEY = "enableSkill";
@@ -921,35 +931,20 @@ export function SkillsMarketplace({
 
   async function saveSelectedSkills(updateSelected: SelectedSkillsUpdate) {
     const run = selectedSaveQueueRef.current.then(async () => {
-      const currentResponse = await fetch("/api/skills", {
-        cache: "no-store",
-      });
-      const currentPayload = await currentResponse.json();
-      if (!currentResponse.ok) {
-        throw new Error(currentPayload.error || t("skillsLoadFailed"));
-      }
-
-      const currentData = currentPayload as SkillsConfigResponse;
+      const currentData = await loadSkillsRequest(t("skillsLoadFailed"));
       const currentSelected = new Set(currentData.selected);
       const nextSelected =
         typeof updateSelected === "function"
           ? updateSelected(currentSelected)
           : updateSelected;
 
-      const response = await fetch("/api/skills", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const nextData = await saveSkillsRequest(
+        {
           enabled: nextSelected.size > 0,
           selected: Array.from(nextSelected),
-        }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || t("skillInstallFailed"));
-      }
-
-      const nextData = payload as SkillsConfigResponse;
+        },
+        t("skillInstallFailed")
+      );
       setData({
         ...nextData,
         requiresRestart: true,
@@ -967,12 +962,7 @@ export function SkillsMarketplace({
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/skills", { cache: "no-store" });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || t("skillsLoadFailed"));
-      }
-      const nextData = payload as SkillsConfigResponse;
+      const nextData = await loadSkillsRequest(t("skillsLoadFailed"));
       setData(nextData);
     } catch (loadError) {
       setError(
@@ -987,14 +977,9 @@ export function SkillsMarketplace({
     setConnectionsLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/skills/connections", {
-        cache: "no-store",
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || t("connectionsLoadFailed"));
-      }
-      const nextConnections = payload as SkillConnectionsResponse;
+      const nextConnections = await loadSkillConnections(
+        t("connectionsLoadFailed")
+      );
       setConnections(nextConnections);
       setMcpConfigText(nextConnections.mcp.configText);
     } catch (loadError) {
@@ -1012,10 +997,7 @@ export function SkillsMarketplace({
     useCallback(async (): Promise<BackendStatusResult> => {
       setCheckingStatus(true);
       try {
-        const response = await fetch("/api/runtime/backend/status", {
-          cache: "no-store",
-        });
-        const status = (await response.json()) as BackendStatusResult;
+        const status = await getBackendStatus();
         setBackendStatus(status);
         return status;
       } finally {
@@ -1026,11 +1008,8 @@ export function SkillsMarketplace({
   const restartBackendWhenIdle = useCallback(async () => {
     setRestarting(true);
     try {
-      const response = await fetch("/api/runtime/backend/restart", {
-        method: "POST",
-      });
-      const restart = (await response.json()) as BackendRestartResult;
-      if (!response.ok || restart.status !== "restarted") {
+      const restart = await restartBackend();
+      if (restart.status !== "restarted") {
         throw new Error(restart.message || t("backendApplyFailed"));
       }
 
@@ -1080,20 +1059,12 @@ export function SkillsMarketplace({
     setConnectionsSaving("scp");
     setError(null);
     try {
-      const response = await fetch("/api/skills/connections", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          options.clear
-            ? { clearScpApiKey: true }
-            : { scpApiKey: scpApiKey.trim() }
-        ),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || t("scpConfigSaveFailed"));
-      }
-      const nextConnections = payload as SkillConnectionsResponse;
+      const nextConnections = await saveSkillConnections(
+        options.clear
+          ? { clearScpApiKey: true }
+          : { scpApiKey: scpApiKey.trim() },
+        t("scpConfigSaveFailed")
+      );
       setConnections(nextConnections);
       setScpApiKey("");
       setBackendStatus(null);
@@ -1123,16 +1094,10 @@ export function SkillsMarketplace({
     setConnectionsSaving("mcp");
     setError(null);
     try {
-      const response = await fetch("/api/skills/connections", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mcpConfigText }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || t("mcpConfigSaveFailed"));
-      }
-      const nextConnections = payload as SkillConnectionsResponse;
+      const nextConnections = await saveSkillConnections(
+        { mcpConfigText },
+        t("mcpConfigSaveFailed")
+      );
       setConnections(nextConnections);
       setMcpConfigText(nextConnections.mcp.configText);
       setBackendStatus(null);
@@ -1189,18 +1154,13 @@ export function SkillsMarketplace({
       SKILL_IMPORT_TIMEOUT_MS
     );
     try {
-      const response = await fetch("/api/skills/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({ type, source }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || t("skillAddFailed"));
-      }
-
-      const importResult = payload as ImportSkillsResponse;
+      const importResult = await importSkills(
+        { type, source },
+        {
+          fallbackMessage: t("skillAddFailed"),
+          signal: controller.signal,
+        }
+      );
       await saveSelectedSkills((currentSelected) => {
         const nextSelected = new Set([
           ...currentSelected,
@@ -1272,18 +1232,9 @@ export function SkillsMarketplace({
     setPickingLocalFolder(true);
     setError(null);
     try {
-      const response = await fetch("/api/skills/local-picker", {
-        method: "POST",
-      });
-      const payload = (await response.json()) as {
-        path?: string;
-        cancelled?: boolean;
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error || t("localFolderPickerOpenFailed"));
-      }
+      const payload = await pickLocalSkillFolder(
+        t("localFolderPickerOpenFailed")
+      );
       if (payload.cancelled) {
         return;
       }

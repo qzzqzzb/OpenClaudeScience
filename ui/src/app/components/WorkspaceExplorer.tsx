@@ -30,6 +30,9 @@ import {
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/app/hooks/useLanguage";
 import { useWorkspaceFiles } from "@/app/hooks/useWorkspaceFiles";
+import {
+  openWorkspaceFolder as openWorkspaceFolderRequest,
+} from "@/app/services/workspaceClient";
 import type { LocalWorkspace, WorkspaceEntry } from "@/app/types/workspace";
 import {
   WORKSPACE_FILE_DRAG_MIME,
@@ -129,17 +132,11 @@ export function WorkspaceExplorer({
 
     setOpeningWorkspaceFolder(true);
     try {
-      const response = await fetch("/api/workspace/open-folder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resourceId, workspaceId }),
+      await openWorkspaceFolderRequest({
+        resourceId,
+        workspaceId,
+        fallbackMessage: t("openProjectFolder"),
       });
-      const payload = (await response.json().catch(() => ({}))) as {
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(payload.error || t("openProjectFolder"));
-      }
     } catch (openError) {
       const message =
         openError instanceof Error
