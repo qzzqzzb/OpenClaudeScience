@@ -143,6 +143,20 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
+function isUserInterruptError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const record = error as { name?: unknown; message?: unknown };
+  return (
+    record.name === "UserInterrupt" ||
+    record.message === "UserInterrupt" ||
+    (typeof record.message === "string" &&
+      record.message.includes("UserInterrupt"))
+  );
+}
+
 function latestActiveRuntimeRun(runs: Run[]): Run | undefined {
   return runs.find((run) =>
     RUNTIME_STREAM_ACTIVE_RUN_STATUSES.has(run.status)
@@ -1616,6 +1630,19 @@ export function useChat({
 
   const handleStreamError = useCallback(
     (error: unknown, run?: { run_id?: string; thread_id?: string }) => {
+      if (isUserInterruptError(error)) {
+        setVisibleError(undefined);
+        setLocalRunInFlight(false);
+        setRunLifecycle({
+          status: "stopped",
+          updatedAt: Date.now(),
+          runId: run?.run_id,
+          threadId: run?.thread_id,
+        });
+        onHistoryRevalidate?.();
+        return;
+      }
+
       setVisibleError(error);
       setLocalRunInFlight(false);
       setRunLifecycle({
@@ -2258,6 +2285,7 @@ export function useChat({
   );
 
   const stopStream = useCallback(() => {
+    setVisibleError(undefined);
     setLocalRunInFlight(false);
     setRunLifecycle((current) => ({
       ...current,

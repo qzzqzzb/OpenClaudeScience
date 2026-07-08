@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { listSshHosts } from "@/app/api/remote-connections/_lib/remote-connections";
+import { getRemoteSshHosts } from "@/server/domains/remote/remote.service";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    return NextResponse.json({ hosts: await listSshHosts() });
+    return NextResponse.json({ hosts: await getRemoteSshHosts() });
   } catch (error) {
     return NextResponse.json(
       {

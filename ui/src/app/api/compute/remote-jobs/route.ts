@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  listRemoteJobs,
-  submitLinuxSshJob,
-} from "@/app/api/compute/_lib/ssh-remote-jobs";
-import { assertComputePostAllowed } from "@/app/api/compute/_lib/compute-auth";
+  getComputeJobs,
+  submitRemoteComputeJob,
+} from "@/server/domains/compute/compute.service";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  return NextResponse.json({ jobs: await listRemoteJobs() });
+  return NextResponse.json({ jobs: await getComputeJobs() });
 }
 
 export async function POST(request: NextRequest) {
   try {
-    assertComputePostAllowed(request);
     const body = await request.json();
-    const job = await submitLinuxSshJob(body);
+    const job = await submitRemoteComputeJob(request, body);
     return NextResponse.json({ job });
   } catch (error) {
     return NextResponse.json(

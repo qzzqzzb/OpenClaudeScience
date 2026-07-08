@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  pushRemoteBackendCli,
-  type RemoteBackendCliPushRequest,
-} from "@/app/api/remote-connections/_lib/remote-connections";
+import { createPushRemoteBackendCliStream } from "@/server/domains/remote/remote.service";
 
 export const runtime = "nodejs";
 
@@ -19,33 +16,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (event: unknown) => {
-        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
-      };
-
-      try {
-        send({ type: "log", message: "Starting backend CLI push..." });
-        const result = await pushRemoteBackendCli(
-          body as RemoteBackendCliPushRequest,
-          (message) => {
-            send({ type: "log", message });
-          }
-        );
-        send({ type: "done", result });
-      } catch (error) {
-        send({
-          type: "error",
-          error:
-            error instanceof Error ? error.message : "Backend CLI push failed.",
-        });
-      } finally {
-        controller.close();
-      }
-    },
-  });
+  const stream = createPushRemoteBackendCliStream(body);
 
   return new Response(stream, {
     headers: {

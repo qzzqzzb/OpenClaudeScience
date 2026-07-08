@@ -1,13 +1,10 @@
-import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import {
-  assertReadableFilePath,
-  getMimeType,
-  getWorkspaceResource,
-  readWorkspaceRawFile,
-  streamLocalWorkspaceRawFile,
+  getWorkspaceRawFileDownloadName,
+  getWorkspaceRawFileMimeType,
+  readWorkspaceRawFileContent,
   WorkspaceRangeNotSatisfiableError,
-} from "../../_lib/workspace";
+} from "@/server/domains/workspace/workspace.service";
 
 export const runtime = "nodejs";
 
@@ -17,34 +14,23 @@ export async function GET(request: NextRequest) {
   const workspaceId = request.nextUrl.searchParams.get("workspaceId");
 
   try {
-    assertReadableFilePath(requestedPath);
-    const resource = getWorkspaceResource(resourceId);
-    const isLocalWorkspace =
-      (resource.backend || "local_shell") === "local_shell";
+    const fileData = await readWorkspaceRawFileContent({
+      path: requestedPath,
+      resourceId,
+      workspaceId,
+      rangeHeader: request.headers.get("range"),
+    });
 
-    if (isLocalWorkspace) {
-      const fileData = await streamLocalWorkspaceRawFile(
-        requestedPath,
-        resourceId,
-        workspaceId,
-        request.headers.get("range")
-      );
-      if (!fileData.isFile) {
-        return NextResponse.json(
-          { error: "Selected workspace path is not a file." },
-          { status: 400 }
-        );
-      }
-
+    if (fileData.kind === "stream") {
       const headers: Record<string, string> = {
-        "Content-Type": getMimeType(fileData.path),
-        "Content-Disposition": `inline; filename="${path
-          .basename(fileData.path)
-          .replace(/["\r\n]/g, "_")}"`,
+        "Content-Type": getWorkspaceRawFileMimeType(fileData.path),
+        "Content-Disposition": `inline; filename="${getWorkspaceRawFileDownloadName(
+          fileData.path
+        )}"`,
         "Cache-Control": "no-store",
         "Content-Length": String(fileData.contentLength),
+        "Accept-Ranges": "bytes",
       };
-      headers["Accept-Ranges"] = "bytes";
       if (fileData.range) {
         headers[
           "Content-Range"
@@ -57,26 +43,14 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const fileData = await readWorkspaceRawFile(
-      requestedPath,
-      resourceId,
-      workspaceId
-    );
-    if (!fileData.isFile) {
-      return NextResponse.json(
-        { error: "Selected workspace path is not a file." },
-        { status: 400 }
-      );
-    }
-
     const body = new Uint8Array(fileData.data);
 
     return new NextResponse(body, {
       headers: {
-        "Content-Type": getMimeType(fileData.path),
-        "Content-Disposition": `inline; filename="${path
-          .basename(fileData.path)
-          .replace(/["\r\n]/g, "_")}"`,
+        "Content-Type": getWorkspaceRawFileMimeType(fileData.path),
+        "Content-Disposition": `inline; filename="${getWorkspaceRawFileDownloadName(
+          fileData.path
+        )}"`,
         "Cache-Control": "no-store",
         "Content-Length": String(fileData.data.byteLength),
       },

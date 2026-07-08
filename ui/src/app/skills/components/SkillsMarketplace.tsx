@@ -744,6 +744,8 @@ export function SkillsMarketplace({
     pickingLocalFolder ||
     checkingStatus ||
     restarting;
+  const localSkillImportBusy = pickingLocalFolder || importingSkill !== null;
+  const cloudSkillImportBusy = importingSkill !== null;
   const preparedSearchQuery = useMemo(
     () => prepareSearchQuery(searchQuery),
     [searchQuery]
@@ -1219,6 +1221,10 @@ export function SkillsMarketplace({
       goToInstalled?: boolean;
     } = {}
   ) {
+    if (localSkillImportBusy) {
+      return;
+    }
+
     const typedSource = options.forcePicker ? "" : localSource.trim();
     if (typedSource) {
       await importAndInstallSkill("local", typedSource, {
@@ -2193,7 +2199,7 @@ export function SkillsMarketplace({
                         goToInstalled: true,
                       })
                     }
-                    disabled={actionBusy}
+                    disabled={localSkillImportBusy}
                   >
                     {pickingLocalFolder || importingSkill === "local" ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -2202,6 +2208,40 @@ export function SkillsMarketplace({
                     )}
                     {t("chooseFolderAndAdd")}
                   </Button>
+                </div>
+                <div className="grid gap-2">
+                  <Label
+                    htmlFor="skills-local-source"
+                    className="text-xs text-muted-foreground"
+                  >
+                    {t("localSkillPath")}
+                  </Label>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      id="skills-local-source"
+                      value={localSource}
+                      onChange={(event) => setLocalSource(event.target.value)}
+                      placeholder={t("localSkillPathPlaceholder")}
+                      disabled={localSkillImportBusy}
+                    />
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        void pickAndInstallLocalSkill({
+                          closeDialogOnSuccess: true,
+                          goToInstalled: true,
+                        })
+                      }
+                      disabled={localSkillImportBusy || !localSource.trim()}
+                    >
+                      {importingSkill === "local" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <PackageCheck className="h-4 w-4" />
+                      )}
+                      {t("addPathAndImport")}
+                    </Button>
+                  </div>
                 </div>
                 <div className="rounded-md bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
                   {t("localSkillImportHelp")}
@@ -2222,19 +2262,22 @@ export function SkillsMarketplace({
                       value={cloudSource}
                       onChange={(event) => setCloudSource(event.target.value)}
                       placeholder={t("githubSkillPlaceholder")}
-                      disabled={actionBusy}
+                      disabled={cloudSkillImportBusy}
                       className="min-w-0 flex-1"
                     />
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() =>
+                      onClick={() => {
+                        if (cloudSkillImportBusy) {
+                          return;
+                        }
                         void importAndInstallSkill("cloud", undefined, {
                           closeDialogOnSuccess: true,
                           goToInstalled: true,
-                        })
-                      }
-                      disabled={actionBusy || !cloudSource.trim()}
+                        });
+                      }}
+                      disabled={cloudSkillImportBusy || !cloudSource.trim()}
                     >
                       {importingSkill === "cloud" ? (
                         <Loader2 className="h-4 w-4 animate-spin" />

@@ -1,20 +1,14 @@
 import { NextResponse } from "next/server";
 import {
-  chooseLocalFolder,
+  pickLocalSkillFolder,
   isUserCancelled,
-} from "@/app/api/_lib/local-folder-picker";
+} from "@/server/domains/skills/skills.service";
 
 export const runtime = "nodejs";
 
 export async function POST() {
   try {
-    const selectedPath = await chooseLocalFolder("选择本地技能文件夹");
-
-    if (!selectedPath) {
-      return NextResponse.json({ cancelled: true });
-    }
-
-    return NextResponse.json({ path: selectedPath });
+    return NextResponse.json(await pickLocalSkillFolder());
   } catch (error) {
     if (isUserCancelled(error)) {
       return NextResponse.json({ cancelled: true });

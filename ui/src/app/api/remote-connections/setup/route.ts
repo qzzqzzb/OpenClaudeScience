@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  setupRemoteConnection,
-  type RemoteConnectionSetupRequest,
-} from "@/app/api/remote-connections/_lib/remote-connections";
+import { createSetupRemoteRuntimeStream } from "@/server/domains/remote/remote.service";
 
 export const runtime = "nodejs";
 
@@ -19,32 +16,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (event: unknown) => {
-        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
-      };
-
-      try {
-        send({ type: "log", message: "开始配置远程 runtime..." });
-        const result = await setupRemoteConnection(
-          body as RemoteConnectionSetupRequest,
-          (message) => {
-            send({ type: "log", message });
-          }
-        );
-        send({ type: "done", result });
-      } catch (error) {
-        send({
-          type: "error",
-          error: error instanceof Error ? error.message : "远程机器配置失败。",
-        });
-      } finally {
-        controller.close();
-      }
-    },
-  });
+  const stream = createSetupRemoteRuntimeStream(body);
 
   return new Response(stream, {
     headers: {

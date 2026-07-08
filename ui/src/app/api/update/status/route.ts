@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { getUpdateStatus } from "@/app/api/update/_lib/update";
+import { getCurrentUpdateStatus } from "@/server/domains/update/update.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const status = await getUpdateStatus();
+  const status = await getCurrentUpdateStatus();
   return NextResponse.json(status);
 }

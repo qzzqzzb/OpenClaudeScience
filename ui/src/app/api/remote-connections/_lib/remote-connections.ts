@@ -1,4 +1,4 @@
-import { execFile, spawn } from "child_process";
+import { execFile } from "child_process";
 import { createHash } from "crypto";
 import { createServer } from "net";
 import { createReadStream, createWriteStream, readFileSync } from "fs";
@@ -11,9 +11,7 @@ import {
   readdir,
   rename,
   rm,
-  writeFile,
 } from "fs/promises";
-import os from "os";
 import path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
@@ -28,6 +26,7 @@ import {
   type ResourceRecord,
   writeResourcesConfigAtPath,
 } from "@/app/api/workspace/_lib/workspace";
+import { sshCliAdapter } from "@/server/shared/adapters/sshCli.adapter";
 
 const execFileAsync = promisify(execFile);
 const LEGACY_REMOTE_RUNTIME_PORT = 22024;
@@ -41,7 +40,6 @@ const REMOTE_SLOT_IDS = Array.from(
   { length: 8 },
   (_, index) => `remote${index + 1}`
 );
-const SSH_CONNECT_TIMEOUT_SECONDS = 8;
 const COMMAND_MAX_BUFFER = 1024 * 1024 * 8;
 const BACKEND_CLI_WHEELHOUSE_DIR = "backend-wheelhouse";
 const BACKEND_CLI_ARCHIVE_NAME = "internagents-backend-cli.tar.gz";
@@ -153,11 +151,6 @@ export interface RemoteBackendCliPushResult {
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
-}
-
-function remoteBashCommand(script: string): string {
-  // Use a non-login shell so remote automation is not broken by interactive profile scripts.
-  return `bash -c ${shellQuote(script)}`;
 }
 
 function pushLog(log: string[], message: string, onLog?: LogSink): void {
@@ -287,21 +280,6 @@ function safeId(value: string): string {
     .slice(0, 40);
 }
 
-function assertSshConfigHost(value: unknown): string {
-  const host = typeof value === "string" ? value.trim() : "";
-  if (!host) {
-    throw new Error("请选择 SSH config 里的 Host。");
-  }
-  if (/\s/.test(host)) {
-    throw new Error("SSH config Host 不能包含空白字符。");
-  }
-  return host;
-}
-
-function sshCommandForHost(host: string): string {
-  return `ssh ${host}`;
-}
-
 function splitShellWords(value: string): string[] {
   const words: string[] = [];
   let current = "";
@@ -423,29 +401,28 @@ function assertSshCommand(value: unknown): string {
   return command;
 }
 
-function sshArgsFromCommand(
-  sshCommand: string,
-  extraOptions: string[] = []
-): string[] {
-  const [binary, ...args] = splitShellWords(assertSshCommand(sshCommand));
-  return [binary, ...extraOptions, ...args];
-}
-
 async function resolveSshConnection(request: {
   connectionMode?: unknown;
   host?: unknown;
   sshCommand?: unknown;
-}): Promise<{ sshCommand: string; displayName: string }> {
-  if (
+}): Promise<{
+  mode: "sshConfig" | "sshCommand";
+  sshCommand: string;
+  displayName: string;
+}> {
+  const useSshCommand =
     request.connectionMode === "sshCommand" ||
-    (typeof request.sshCommand === "string" && request.sshCommand.trim())
-  ) {
-    const sshCommand = assertSshCommand(request.sshCommand);
-    return { sshCommand, displayName: sshCommand };
-  }
-
-  const host = await assertKnownSshHost(request.host);
-  return { sshCommand: sshCommandForHost(host), displayName: host };
+    (typeof request.sshCommand === "string" && request.sshCommand.trim());
+  const connection = await sshCliAdapter.resolveConnection({
+    connectionMode: useSshCommand ? "sshCommand" : "sshConfig",
+    host: request.host,
+    sshCommand: request.sshCommand,
+  });
+  return {
+    mode: connection.mode,
+    sshCommand: connection.sshCommand,
+    displayName: connection.displayName,
+  };
 }
 
 function defaultRemoteRuntimeDir(resourceId: string): string {
@@ -465,93 +442,47 @@ async function runSshCommand(
   script: string,
   timeoutMs: number
 ): Promise<{ stdout: string; stderr: string }> {
-  const [binary, ...args] = sshArgsFromCommand(sshCommand, [
-    "-o",
-    "BatchMode=yes",
-    "-o",
-    `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SECONDS}`,
-  ]);
-  return execFileAsync(binary, [...args, remoteBashCommand(script)], {
-    timeout: timeoutMs,
-    maxBuffer: COMMAND_MAX_BUFFER,
-    windowsHide: true,
+  const connection = await sshCliAdapter.resolveConnection({
+    connectionMode: "sshCommand",
+    sshCommand,
   });
-}
-
-function isSshConfigPattern(host: string): boolean {
-  return host.includes("*") || host.includes("?") || host.includes("!");
-}
-
-async function readSshConfigFile(
-  filePath: string,
-  seen = new Set<string>()
-): Promise<SshHostEntry[]> {
-  const resolved = filePath.startsWith("~/")
-    ? path.join(os.homedir(), filePath.slice(2))
-    : filePath;
-  if (seen.has(resolved)) {
-    return [];
-  }
-  seen.add(resolved);
-
-  let content: string;
-  try {
-    content = await readFile(resolved, "utf8");
-  } catch {
-    return [];
+  const result = await sshCliAdapter.runCommand({
+    connection,
+    script,
+    timeoutMs,
+    maxBufferBytes: COMMAND_MAX_BUFFER,
+  });
+  if (result.exitCode === 0) {
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+    };
   }
 
-  const entries: SshHostEntry[] = [];
-  const dir = path.dirname(resolved);
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.replace(/#.*/, "").trim();
-    if (!line) continue;
-    const [keywordRaw, ...rest] = line.split(/\s+/);
-    const keyword = keywordRaw.toLowerCase();
-    if (keyword === "host") {
-      for (const host of rest) {
-        if (host && !isSshConfigPattern(host)) {
-          entries.push({ host, source: resolved });
-        }
-      }
-      continue;
-    }
-    if (keyword === "include") {
-      for (const includePath of rest) {
-        if (!includePath || includePath.includes("*")) {
-          continue;
-        }
-        const child = path.isAbsolute(includePath)
-          ? includePath
-          : path.resolve(dir, includePath);
-        entries.push(...(await readSshConfigFile(child, seen)));
-      }
-    }
-  }
-  return entries;
+  const error = new Error(
+    result.stderr ||
+      result.stdout ||
+      `Remote SSH command failed with exit code ${result.exitCode}.`
+  ) as Error & { stdout?: string; stderr?: string };
+  error.stdout = result.stdout;
+  error.stderr = result.stderr;
+  throw error;
 }
 
 export async function listSshHosts(): Promise<SshHostEntry[]> {
-  const entries = await readSshConfigFile(
-    path.join(os.homedir(), ".ssh", "config")
-  );
-  const seen = new Set<string>();
-  return entries
-    .filter((entry) => {
-      if (seen.has(entry.host)) return false;
-      seen.add(entry.host);
-      return true;
-    })
-    .sort((a, b) => a.host.localeCompare(b.host));
+  const hosts = await sshCliAdapter.listHosts();
+  return hosts.map((entry) => ({
+    host: entry.alias,
+    source: entry.source,
+  }));
 }
 
 export async function assertKnownSshHost(value: unknown): Promise<string> {
-  const host = assertSshConfigHost(value);
-  const hosts = await listSshHosts();
-  if (!hosts.some((entry) => entry.host === host)) {
-    throw new Error(`未在 ~/.ssh/config 中找到 Host: ${host}`);
-  }
-  return host;
+  const connection = await sshCliAdapter.resolveConnection({
+    connectionMode: "sshConfig",
+    host: value,
+  });
+  return connection.hostAlias || connection.displayName;
 }
 
 export async function testSshConnection(
@@ -563,20 +494,31 @@ export async function testSshConnection(
   stdout: string;
   stderr: string;
 }> {
-  const script = [
-    "set -e",
-    "printf 'user=%s\\n' \"$(id -un)\"",
-    "printf 'host=%s\\n' \"$(hostname)\"",
-    "printf 'python=%s\\n' \"$(command -v python3 || true)\"",
-    "printf 'pwd=%s\\n' \"$(pwd)\"",
-  ].join("\n");
   try {
     const connection =
       typeof request === "string"
         ? await resolveSshConnection({ host: request })
         : await resolveSshConnection(request);
-    const result = await runSshCommand(connection.sshCommand, script, 15_000);
-    return { ok: true, stdout: result.stdout, stderr: result.stderr };
+    const probe = await sshCliAdapter.testConnection({
+      connection: {
+        mode: connection.mode,
+        sshCommand: connection.sshCommand,
+        displayName: connection.displayName,
+      },
+      timeoutMs: 15_000,
+    });
+    return {
+      ok: probe.ok,
+      stdout: probe.ok
+        ? [
+            `user=${probe.user || ""}`,
+            `host=${probe.host || ""}`,
+            `python=${probe.python || ""}`,
+            `pwd=${probe.workdir || ""}`,
+          ].join("\n")
+        : "",
+      stderr: probe.ok ? "" : probe.error || "SSH 测试失败。",
+    };
   } catch (error) {
     const err = error as Error & { stdout?: string; stderr?: string };
     return {
@@ -595,7 +537,8 @@ function uiResourceFromRecord(resource: ResourceRecord): UiResourceConfig {
   return {
     id: resource.id,
     label: resource.label || resource.id,
-    assistantId: assistantIdForResource(resource.id),
+    assistantId:
+      resource.remote_assistant_id || assistantIdForResource(resource.id),
     backend: resource.backend,
     runtimeUrl: resource.remote_url,
     remoteRuntimePort: resource.remote_runtime_port,
@@ -624,6 +567,33 @@ function nextRemoteResourceId(
     throw new Error("远程资源槽位已用完。当前版本支持 remote1 到 remote8。");
   }
   return freeSlot;
+}
+
+function findExistingRemoteResource(
+  resources: ResourceRecord[],
+  sshCommand: string,
+  workspace: string
+): ResourceRecord | undefined {
+  const normalizedSshCommand = sshCommand.trim();
+  const normalizedWorkspace = workspace.trim();
+  return resources.find(
+    (resource) =>
+      resource.backend === "ssh_shell" &&
+      resource.ssh_command?.trim() === normalizedSshCommand &&
+      resource.workspace?.trim() === normalizedWorkspace
+  );
+}
+
+function isSameRemoteWorkspace(
+  resource: ResourceRecord,
+  sshCommand: string,
+  workspace: string
+): boolean {
+  return (
+    resource.backend === "ssh_shell" &&
+    resource.ssh_command?.trim() === sshCommand.trim() &&
+    resource.workspace?.trim() === workspace.trim()
+  );
 }
 
 function assertRemoteWorkspace(value: unknown): string {
@@ -1437,35 +1407,22 @@ async function streamFileOverSsh(
   localPath: string,
   remoteScript: string
 ): Promise<void> {
-  const [sshBinary, ...baseSshArgs] = sshArgsFromCommand(sshCommand, [
-    "-o",
-    "BatchMode=yes",
-    "-o",
-    `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SECONDS}`,
-  ]);
-  await new Promise<void>((resolve, reject) => {
-    const input = createReadStream(localPath);
-    const ssh = spawn(
-      sshBinary,
-      [...baseSshArgs, remoteBashCommand(remoteScript)],
-      {
-        stdio: ["pipe", "pipe", "pipe"],
-        windowsHide: true,
-      }
-    );
-    const errors: string[] = [];
-    input.on("error", reject);
-    ssh.on("error", reject);
-    ssh.stderr.on("data", (chunk) => errors.push(String(chunk)));
-    input.pipe(ssh.stdin);
-    ssh.on("close", (code) => {
-      if ((code ?? 1) === 0) {
-        resolve();
-      } else {
-        reject(new Error(errors.join("\n") || `SSH upload failed: ${code}`));
-      }
-    });
+  const connection = await sshCliAdapter.resolveConnection({
+    connectionMode: "sshCommand",
+    sshCommand,
   });
+  const result = await sshCliAdapter.runCommandWithInput({
+    connection,
+    script: remoteScript,
+    stdin: createReadStream(localPath),
+    maxBufferBytes: COMMAND_MAX_BUFFER,
+    timeoutMs: 0,
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(
+      result.stderr || result.stdout || `SSH upload failed: ${result.exitCode}`
+    );
+  }
 }
 
 async function streamTextOverSsh(
@@ -1473,35 +1430,22 @@ async function streamTextOverSsh(
   content: string,
   remoteScript: string
 ): Promise<void> {
-  const [sshBinary, ...baseSshArgs] = sshArgsFromCommand(sshCommand, [
-    "-o",
-    "BatchMode=yes",
-    "-o",
-    `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SECONDS}`,
-  ]);
-  await new Promise<void>((resolve, reject) => {
-    const input = Readable.from([content]);
-    const ssh = spawn(
-      sshBinary,
-      [...baseSshArgs, remoteBashCommand(remoteScript)],
-      {
-        stdio: ["pipe", "pipe", "pipe"],
-        windowsHide: true,
-      }
-    );
-    const errors: string[] = [];
-    input.on("error", reject);
-    ssh.on("error", reject);
-    ssh.stderr.on("data", (chunk) => errors.push(String(chunk)));
-    input.pipe(ssh.stdin);
-    ssh.on("close", (code) => {
-      if ((code ?? 1) === 0) {
-        resolve();
-      } else {
-        reject(new Error(errors.join("\n") || `SSH upload failed: ${code}`));
-      }
-    });
+  const connection = await sshCliAdapter.resolveConnection({
+    connectionMode: "sshCommand",
+    sshCommand,
   });
+  const result = await sshCliAdapter.runCommandWithInput({
+    connection,
+    script: remoteScript,
+    stdin: content,
+    maxBufferBytes: COMMAND_MAX_BUFFER,
+    timeoutMs: 0,
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(
+      result.stderr || result.stdout || `SSH upload failed: ${result.exitCode}`
+    );
+  }
 }
 
 async function readRemoteBackendCliMarker(
@@ -2037,34 +1981,25 @@ async function ensureRuntimeTunnel(
   const runtimeDir = path.join(root, ".internagents");
   const logDir = path.join(runtimeDir, "logs");
   const pidDir = path.join(runtimeDir, "pids");
-  await mkdir(logDir, { recursive: true });
-  await mkdir(pidDir, { recursive: true });
   const pidFile = path.join(pidDir, `remote-tunnel-${resourceId}.pid`);
-  try {
-    const pid = Number((await readFile(pidFile, "utf8")).trim());
-    if (Number.isInteger(pid) && pid > 0) {
-      process.kill(pid, "SIGTERM");
-    }
-  } catch {
-    // No previous tunnel to stop.
-  }
-
-  const [sshBinary, ...baseSshArgs] = sshArgsFromCommand(sshCommand, [
-    "-N",
-    "-L",
-    `${localPort}:127.0.0.1:${remotePort}`,
-  ]);
   const logFile = path.join(logDir, `remote-tunnel-${resourceId}.log`);
-  const out = createWriteStream(logFile, { flags: "a" });
-  const child = spawn(sshBinary, baseSshArgs, {
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
+  const connection = await sshCliAdapter.resolveConnection({
+    connectionMode: "sshCommand",
+    sshCommand,
   });
-  child.stdout?.pipe(out);
-  child.stderr?.pipe(out);
-  child.unref();
-  await writeFile(pidFile, `${child.pid}\n`);
-  pushLog(log, `启动本地 tunnel: ${url} -> 127.0.0.1:${remotePort}`, onLog);
+  const tunnel = await sshCliAdapter.openTunnel({
+    connection,
+    localPort,
+    remotePort,
+    logFile,
+    pidFile,
+    replaceExistingPid: true,
+  });
+  pushLog(
+    log,
+    `启动本地 tunnel: ${tunnel.localUrl} -> 127.0.0.1:${remotePort}`,
+    onLog
+  );
 
   if (!(await waitForUrl(`${url}/ok`))) {
     throw new Error(
@@ -2460,8 +2395,6 @@ export async function setupRemoteConnection(
   const installOptions = normalizeInstallOptions(request);
   const { configPath, config } = await getWritableResourcesConfig();
   const resources = config.resources || [];
-  const resourceId = nextRemoteResourceId(resources, request.resourceId);
-  const localPort = await chooseLocalPort(request.localPort);
   const log: string[] = [];
 
   const test = await testSshConnection(request);
@@ -2469,17 +2402,37 @@ export async function setupRemoteConnection(
     throw new Error(`SSH 连接失败: ${test.stderr || test.stdout}`);
   }
   pushLog(log, `SSH 连接可用: ${connection.displayName}`, onLog);
-  const remoteRuntimePort = await chooseRemoteRuntimePort(
-    sshCommand,
-    resourceId,
-    resources,
-    log,
-    onLog
-  );
   const workspace = await resolveRemotePath(
     sshCommand,
     requestedWorkspace,
     "远端项目路径",
+    log,
+    onLog
+  );
+  const existingResource = findExistingRemoteResource(
+    resources,
+    sshCommand,
+    workspace
+  );
+  const resourceId =
+    existingResource?.id || nextRemoteResourceId(resources, request.resourceId);
+  if (existingResource) {
+    pushLog(
+      log,
+      `复用已有远程资源: ${existingResource.label || existingResource.id}`,
+      onLog
+    );
+  }
+  const localPort = await chooseLocalPort(
+    request.localPort ||
+      (existingResource
+        ? configuredLocalTunnelPort(existingResource)
+        : undefined)
+  );
+  const remoteRuntimePort = await chooseRemoteRuntimePort(
+    sshCommand,
+    resourceId,
+    resources,
     log,
     onLog
   );
@@ -2560,7 +2513,11 @@ export async function setupRemoteConnection(
   );
 
   const nextResources = [
-    ...resources.filter((candidate) => candidate.id !== resourceId),
+    ...resources.filter(
+      (candidate) =>
+        candidate.id !== resourceId &&
+        !isSameRemoteWorkspace(candidate, sshCommand, workspace)
+    ),
     resource,
   ];
   config.resources = nextResources;
@@ -2571,7 +2528,8 @@ export async function setupRemoteConnection(
   const uiResource = {
     id: resourceId,
     label,
-    assistantId: assistantIdForResource(resourceId),
+    assistantId:
+      resource.remote_assistant_id || assistantIdForResource(resourceId),
     runtimeUrl: remoteUrl,
     remoteRuntimePort,
     workspacePath: workspace,

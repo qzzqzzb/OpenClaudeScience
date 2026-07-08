@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  readSkillsConfig,
-  updateSkillsConfig,
-} from "@/app/api/skills/_lib/skills";
-import type { UpdateSkillsRequest } from "@/app/skills/types";
+  getSkillsConfig,
+  updateSkills,
+} from "@/server/domains/skills/skills.service";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    return NextResponse.json(await readSkillsConfig());
+    return NextResponse.json(await getSkillsConfig());
   } catch (error) {
     return NextResponse.json(
       {
@@ -25,18 +24,7 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = (await request.json()) as Partial<UpdateSkillsRequest>;
-    const selected = Array.isArray(body.selected) ? body.selected : [];
-    const enabled = typeof body.enabled === "boolean" ? body.enabled : false;
-    const skillsConfig = await updateSkillsConfig(enabled, selected);
-
-    return NextResponse.json(
-      {
-        ...skillsConfig,
-        requiresRestart: true,
-        message: "技能配置已保存，应用后生效。",
-      }
-    );
+    return NextResponse.json(await updateSkills(await request.json()));
   } catch (error) {
     return NextResponse.json(
       {

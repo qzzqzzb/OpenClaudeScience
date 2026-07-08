@@ -1,31 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { importSkills } from "@/app/api/skills/_lib/skills";
-import type { ImportSkillsRequest } from "@/app/skills/types";
+import {
+  importSkillsFromSource,
+  SkillsRequestError,
+} from "@/server/domains/skills/skills.service";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as Partial<ImportSkillsRequest>;
-    const type = body.type;
-    const source = typeof body.source === "string" ? body.source.trim() : "";
-
-    if (type !== "local" && type !== "cloud") {
-      return NextResponse.json(
-        { error: "请选择本地技能或云端技能。" },
-        { status: 400 }
-      );
-    }
-
-    if (!source) {
-      return NextResponse.json(
-        { error: "请输入技能来源。" },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(await importSkills(type, source));
+    return NextResponse.json(await importSkillsFromSource(await request.json()));
   } catch (error) {
+    if (error instanceof SkillsRequestError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.statusCode }
+      );
+    }
+
     return NextResponse.json(
       {
         error:

@@ -12,6 +12,7 @@ export interface ResourceConfig {
   assistantId: string;
   backend?: "local_shell" | "ssh_shell";
   runtimeUrl?: string;
+  remoteRuntimePort?: number;
   workspacePath?: string;
 }
 
@@ -81,6 +82,10 @@ function parseResourceEnv(value: string | undefined): ResourceConfig[] | null {
           runtimeUrl:
             typeof record.runtimeUrl === "string"
               ? record.runtimeUrl
+              : undefined,
+          remoteRuntimePort:
+            typeof record.remoteRuntimePort === "number"
+              ? record.remoteRuntimePort
               : undefined,
           workspacePath:
             typeof record.workspacePath === "string"

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRemoteJobSnapshot } from "@/app/api/compute/_lib/ssh-remote-jobs";
+import { getComputeJobSnapshot } from "@/server/domains/compute/compute.service";
 
 export const runtime = "nodejs";
 
@@ -9,7 +9,7 @@ export async function GET(
 ) {
   try {
     const { jobId } = await context.params;
-    const job = await getRemoteJobSnapshot(jobId);
+    const job = await getComputeJobSnapshot(jobId);
     return NextResponse.json({ job });
   } catch (error) {
     return NextResponse.json(

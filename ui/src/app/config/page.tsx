@@ -75,6 +75,10 @@ const DEFAULT_CONFIG: ConfigResponse = {
   missing: [],
 };
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 const AUTHORIZATION_OPTIONS: Array<{
   id: AuthorizationMode;
   title: CopyKey;
@@ -416,6 +420,28 @@ function ConfigPageContent() {
     }
   }
 
+  async function waitForBackendIdleAfterRestartError(
+    timeoutMs = 30_000
+  ): Promise<BackendStatusResult | null> {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      try {
+        const status = await getBackendStatusRequest();
+        setBackendStatus(status);
+        if (status.status === "idle") {
+          return status;
+        }
+      } catch {
+        // The backend may be between stop and start; keep checking briefly.
+      }
+
+      await sleep(1000);
+    }
+
+    return null;
+  }
+
   async function restartBackendNow({
     manual,
     redirectHome = false,
@@ -460,6 +486,25 @@ function ConfigPageContent() {
       }
       return true;
     } catch (restartError) {
+      const status = await waitForBackendIdleAfterRestartError();
+      if (status) {
+        const message = t("configApplied");
+        setRestartResult({
+          status: "restarted",
+          message,
+          url: status.url,
+          logPath: "",
+        });
+        setRequiresRestart(false);
+        setAutoRestart(false);
+        setError(null);
+        toast.success(message);
+        if (redirectHome) {
+          await navigateAfterOnboarding({ waitForReady: true });
+        }
+        return true;
+      }
+
       const message =
         restartError instanceof Error
           ? restartError.message

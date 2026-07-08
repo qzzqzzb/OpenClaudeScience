@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  listLocalWorkspaceEntriesFromResolvedPath,
-  listWorkspaceEntries,
-  resolveWorkspacePath,
-} from "../_lib/workspace";
-import type { WorkspaceListResponse } from "@/app/types/workspace";
+import { listWorkspaceDirectory } from "@/server/domains/workspace/workspace.service";
 
 export const runtime = "nodejs";
 
@@ -15,24 +10,11 @@ export async function GET(request: NextRequest) {
   const workspaceId = searchParams.get("workspaceId");
 
   try {
-    const resolved = await resolveWorkspacePath(
-      requestedPath,
+    const payload = await listWorkspaceDirectory({
+      path: requestedPath,
       resourceId,
-      workspaceId
-    );
-    const isLocalWorkspace =
-      (resolved.resource.backend || "local_shell") === "local_shell";
-    const entries = isLocalWorkspace
-      ? await listLocalWorkspaceEntriesFromResolvedPath(
-          resolved,
-          resourceId,
-          workspaceId
-        )
-      : await listWorkspaceEntries(resolved.relativePath, resourceId, workspaceId);
-    const payload: WorkspaceListResponse = {
-      path: resolved.relativePath,
-      entries,
-    };
+      workspaceId,
+    });
 
     return NextResponse.json(payload);
   } catch (error) {

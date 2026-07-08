@@ -1,16 +1,11 @@
 import { NextResponse } from "next/server";
-import { listUiResources } from "@/app/api/remote-connections/_lib/remote-connections";
-import { readWorkspaceResourcesConfig } from "@/app/api/workspace/_lib/workspace";
+import { getResources } from "@/server/domains/resources/resources.service";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const config = readWorkspaceResourcesConfig();
-    return NextResponse.json({
-      defaultResourceId: config.default_resource || "local",
-      resources: listUiResources(),
-    });
+    return NextResponse.json(getResources());
   } catch (error) {
     return NextResponse.json(
       {

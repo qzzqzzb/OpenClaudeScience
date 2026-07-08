@@ -25,6 +25,32 @@ export interface BackendStatusResult {
 
 const DEFAULT_STATUS_ERROR = "Unable to load backend status.";
 const DEFAULT_RESTART_ERROR = "Unable to restart backend.";
+const RESTART_REQUEST_TIMEOUT_MS = 20_000;
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+  timeoutMessage: string
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const maybeAbort = error as { name?: string };
+    if (maybeAbort?.name === "AbortError") {
+      throw new Error(timeoutMessage);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 
 export function isLocalDeploymentUrl(value: string): boolean {
   try {
@@ -86,9 +112,14 @@ export async function getBackendStatus(
 export async function restartBackend(
   fallbackMessage = DEFAULT_RESTART_ERROR
 ): Promise<BackendRestartResult> {
-  const response = await fetch("/api/runtime/backend/restart", {
-    method: "POST",
-  });
+  const response = await fetchWithTimeout(
+    "/api/runtime/backend/restart",
+    {
+      method: "POST",
+    },
+    RESTART_REQUEST_TIMEOUT_MS,
+    fallbackMessage
+  );
   const payload = (await response.json().catch(() => null)) as
     | (Partial<BackendRestartResult> & ApiErrorPayload)
     | null;

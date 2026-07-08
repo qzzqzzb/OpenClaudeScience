@@ -1746,7 +1746,6 @@ function HomePageContent() {
   const [workspaceId, setWorkspaceId] = useQueryState("workspaceId");
   const [threadId, setThreadId] = useQueryState("threadId");
   const previousResourceId = useRef<string | null>(null);
-  const deploymentUrl = config?.deploymentUrl;
 
   const refreshResources = useCallback(
     async (knownResources?: ResourceConfig[]) => {
@@ -1837,25 +1836,29 @@ function HomePageContent() {
   }, []);
 
   useEffect(() => {
-    if (!deploymentUrl) {
+    if (!config) {
       setLocalBackendReady(false);
       return;
     }
 
-    if (!isLocalDeploymentUrl(deploymentUrl)) {
+    const selectedResource = getResource(config, resourceId);
+    const targetDeploymentUrl =
+      selectedResource?.runtimeUrl || config.deploymentUrl;
+
+    if (!isLocalDeploymentUrl(targetDeploymentUrl)) {
       setLocalBackendReady(true);
       return;
     }
 
     let cancelled = false;
     let timeoutId = 0;
-    let hadCachedReady = readBackendReadyCache(deploymentUrl);
+    let hadCachedReady = readBackendReadyCache(targetDeploymentUrl);
 
     setLocalBackendReady(hadCachedReady);
 
     const poll = async () => {
-      if (await isLocalBackendReady(deploymentUrl)) {
-        writeBackendReadyCache(deploymentUrl);
+      if (await isLocalBackendReady(targetDeploymentUrl)) {
+        writeBackendReadyCache(targetDeploymentUrl);
         if (!cancelled) {
           setLocalBackendReady(true);
         }
@@ -1877,7 +1880,7 @@ function HomePageContent() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [deploymentUrl]);
+  }, [config, resourceId]);
 
   useEffect(() => {
     if (!config) return;
@@ -1932,13 +1935,26 @@ function HomePageContent() {
     return <StartupState />;
   }
 
-  if (isLocalDeploymentUrl(config.deploymentUrl) && !localBackendReady) {
-    return <StartupState />;
-  }
-
   const activeResource = getResource(config, resourceId);
   const activeAssistantId = activeResource?.assistantId || config.assistantId;
   const isActiveLocalResource = activeResource?.id === "local";
+  const localWorkspaceMissing = isActiveLocalResource && !workspaceId;
+  const localWorkspaceNotFound =
+    isActiveLocalResource &&
+    !!workspaceId &&
+    workspaces.length > 0 &&
+    !workspaces.some((workspace) => workspace.id === workspaceId);
+
+  if (localWorkspaceMissing || localWorkspaceNotFound) {
+    return <StartupState />;
+  }
+
+  const activeDeploymentUrl = activeResource.runtimeUrl || config.deploymentUrl;
+
+  if (isLocalDeploymentUrl(activeDeploymentUrl) && !localBackendReady) {
+    return <StartupState />;
+  }
+
   const activeWorkspace = isActiveLocalResource
     ? workspaces.find((workspace) => workspace.id === workspaceId) || null
     : {
@@ -1952,8 +1968,8 @@ function HomePageContent() {
 
   return (
     <RemoteAgentProvider
-      key={`${config.deploymentUrl}:${activeAssistantId}`}
-      deploymentUrl={config.deploymentUrl}
+      key={`${activeDeploymentUrl}:${activeAssistantId}`}
+      deploymentUrl={activeDeploymentUrl}
       assistantId={activeAssistantId}
       apiKey={langsmithApiKey}
     >

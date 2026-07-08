@@ -523,9 +523,12 @@ const COPY = {
     githubAddress: "GitHub 地址",
     chooseLocalSkillFolder: "选择本地技能目录",
     localSkillFolderRequirement: "目录内需要包含 SKILL.md 文件",
+    localSkillPath: "本地技能路径",
+    localSkillPathPlaceholder: "例如 E:\\OpenClaudeScience\\skills\\my-skill",
+    addPathAndImport: "按路径导入",
     chooseFolderAndAdd: "选择目录并添加",
     localSkillImportHelp:
-      "适合已经下载到本机的技能。选择目录后会导入列表，并默认启用。",
+      "适合已经下载到本机的技能。可以选择目录，也可以直接粘贴本地路径。",
     cloudAddress: "云端地址",
     githubSkillPlaceholder:
       "github:owner/repo/path 或 https://github.com/owner/repo",
@@ -1279,9 +1282,12 @@ const COPY = {
     githubAddress: "GitHub URL",
     chooseLocalSkillFolder: "Choose local skill folder",
     localSkillFolderRequirement: "The folder must contain a SKILL.md file",
+    localSkillPath: "Local skill path",
+    localSkillPathPlaceholder: "Example: E:\\OpenClaudeScience\\skills\\my-skill",
+    addPathAndImport: "Import path",
     chooseFolderAndAdd: "Choose folder and add",
     localSkillImportHelp:
-      "Use this for skills already downloaded to this machine. After choosing a folder, it is imported into the list and enabled by default.",
+      "Use this for skills already downloaded to this machine. Choose a folder or paste a local path directly.",
     cloudAddress: "Cloud URL",
     githubSkillPlaceholder:
       "github:owner/repo/path or https://github.com/owner/repo",

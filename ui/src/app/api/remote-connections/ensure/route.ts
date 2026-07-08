@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  ensureRemoteResourceRuntime,
-  type RemoteConnectionEnsureResult,
-} from "@/app/api/remote-connections/_lib/remote-connections";
+import { createEnsureRemoteRuntimeStream } from "@/server/domains/remote/remote.service";
 
 export const runtime = "nodejs";
 
@@ -19,41 +16,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const resourceId =
-    body && typeof body === "object"
-      ? (body as Record<string, unknown>).resourceId
-      : undefined;
-
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (event: unknown) => {
-        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
-      };
-
-      try {
-        send({ type: "log", message: "检查远程 backend runtime 版本..." });
-        const result: RemoteConnectionEnsureResult =
-          await ensureRemoteResourceRuntime(
-            typeof resourceId === "string" ? resourceId : "",
-            (message) => {
-              send({ type: "log", message });
-            }
-          );
-        send({ type: "done", result });
-      } catch (error) {
-        send({
-          type: "error",
-          error:
-            error instanceof Error
-              ? error.message
-              : "远程 backend runtime 同步失败。",
-        });
-      } finally {
-        controller.close();
-      }
-    },
-  });
+  const stream = createEnsureRemoteRuntimeStream(body);
 
   return new Response(stream, {
     headers: {

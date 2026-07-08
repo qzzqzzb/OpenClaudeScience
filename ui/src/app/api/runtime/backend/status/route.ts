@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { getBackendStatus } from "@/app/api/runtime/_lib/backend";
+import { getRuntimeStatus } from "@/server/domains/runtime/runtime.service";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const result = await getBackendStatus();
+  const result = await getRuntimeStatus();
   return NextResponse.json(result, {
     status: result.status === "unavailable" ? 503 : 200,
   });

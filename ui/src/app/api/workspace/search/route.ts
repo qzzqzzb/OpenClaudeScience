@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchWorkspaceFiles } from "../_lib/workspace";
-import type { WorkspaceSearchResponse } from "@/app/types/workspace";
+import { searchWorkspaceDirectoryFiles } from "@/server/domains/workspace/workspace.service";
 
 export const runtime = "nodejs";
 
@@ -13,14 +12,13 @@ export async function GET(request: NextRequest) {
   const limitValue = Number(searchParams.get("limit") || "");
 
   try {
-    const entries = await searchWorkspaceFiles(query, resourceId, workspaceId, {
-      relativePath: requestedPath,
-      maxResults: Number.isFinite(limitValue) ? limitValue : undefined,
-    });
-    const payload: WorkspaceSearchResponse = {
+    const payload = await searchWorkspaceDirectoryFiles({
       query,
-      entries,
-    };
+      path: requestedPath,
+      resourceId,
+      workspaceId,
+      limit: limitValue,
+    });
 
     return NextResponse.json(payload);
   } catch (error) {

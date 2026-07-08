@@ -1,20 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  chooseLocalFolder,
+  deleteWorkspace,
+  getWorkspaces,
   isUserCancelled,
-} from "@/app/api/_lib/local-folder-picker";
-import {
-  listLocalWorkspaces,
-  removeLocalWorkspace,
-  updateLocalWorkspaceRecord,
-  updateLocalResourceWorkspace,
-} from "@/app/api/workspace/_lib/workspace";
+  pickWorkspace,
+  setDefaultWorkspace,
+  updateWorkspace,
+  WorkspacesRequestError,
+} from "@/server/domains/workspaces/workspaces.service";
+import type {
+  SetDefaultWorkspaceInput,
+  UpdateWorkspaceInput,
+} from "@/server/domains/workspaces/workspaces.types";
 
 export const runtime = "nodejs";
 
+function errorStatus(error: unknown): number {
+  return error instanceof WorkspacesRequestError ? error.statusCode : 500;
+}
+
 export async function GET() {
   try {
-    return NextResponse.json(await listLocalWorkspaces());
+    return NextResponse.json(await getWorkspaces());
   } catch (error) {
     return NextResponse.json(
       {
@@ -27,61 +34,22 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = (await request.json()) as {
-      workspacePath?: unknown;
-    };
-    const workspacePath =
-      typeof body.workspacePath === "string" ? body.workspacePath.trim() : "";
-    if (!workspacePath) {
-      throw new Error("项目路径不能为空。");
-    }
-
-    await updateLocalResourceWorkspace(workspacePath);
-    return NextResponse.json(await listLocalWorkspaces());
+    const body = (await request.json()) as SetDefaultWorkspaceInput;
+    return NextResponse.json(await setDefaultWorkspace(body));
   } catch (error) {
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "无法切换项目。",
       },
-      { status: 500 }
+      { status: errorStatus(error) }
     );
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
-    const body = (await request.json()) as {
-      workspaceId?: unknown;
-      label?: unknown;
-      workspacePath?: unknown;
-      chooseFolder?: unknown;
-      refreshLabel?: unknown;
-    };
-    const workspaceId =
-      typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
-    if (!workspaceId) {
-      return NextResponse.json(
-        { error: "项目 ID 不能为空。" },
-        { status: 400 }
-      );
-    }
-
-    let workspacePath =
-      typeof body.workspacePath === "string" ? body.workspacePath.trim() : "";
-    if (body.chooseFolder === true) {
-      const selectedPath = await chooseLocalFolder("重新选择项目文件夹");
-      if (!selectedPath) {
-        return NextResponse.json({ cancelled: true });
-      }
-      workspacePath = selectedPath;
-    }
-
-    const updated = await updateLocalWorkspaceRecord(workspaceId, {
-      label: typeof body.label === "string" ? body.label : undefined,
-      workspacePath: workspacePath || undefined,
-      refreshLabel: body.refreshLabel === true,
-    });
-    return NextResponse.json(updated);
+    const body = (await request.json()) as UpdateWorkspaceInput;
+    return NextResponse.json(await updateWorkspace(body));
   } catch (error) {
     if (isUserCancelled(error)) {
       return NextResponse.json({ cancelled: true });
@@ -91,7 +59,7 @@ export async function PATCH(request: NextRequest) {
       {
         error: error instanceof Error ? error.message : "无法更新项目。",
       },
-      { status: 500 }
+      { status: errorStatus(error) }
     );
   }
 }
@@ -99,38 +67,20 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const workspaceId = request.nextUrl.searchParams.get("id")?.trim() || "";
-    if (!workspaceId) {
-      return NextResponse.json(
-        { error: "项目 ID 不能为空。" },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(await removeLocalWorkspace(workspaceId));
+    return NextResponse.json(await deleteWorkspace(workspaceId));
   } catch (error) {
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "无法移除项目。",
       },
-      { status: 500 }
+      { status: errorStatus(error) }
     );
   }
 }
 
 export async function POST() {
   try {
-    const selectedPath = await chooseLocalFolder("选择本机项目文件夹");
-    if (!selectedPath) {
-      return NextResponse.json({ cancelled: true });
-    }
-
-    const updated = await updateLocalResourceWorkspace(selectedPath);
-    const localWorkspaces = await listLocalWorkspaces();
-    return NextResponse.json({
-      ...localWorkspaces,
-      workspaceId: updated.workspaceId,
-      workspacePath: updated.workspacePath,
-    });
+    return NextResponse.json(await pickWorkspace());
   } catch (error) {
     if (isUserCancelled(error)) {
       return NextResponse.json({ cancelled: true });

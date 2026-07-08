@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { testSshConnection } from "@/app/api/remote-connections/_lib/remote-connections";
+import { testRemoteConnection } from "@/server/domains/remote/remote.service";
 
 export const runtime = "nodejs";
 
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
       host?: unknown;
       sshCommand?: unknown;
     };
-    const result = await testSshConnection(body);
+    const result = await testRemoteConnection(body);
     return NextResponse.json(result, { status: result.ok ? 200 : 400 });
   } catch (error) {
     return NextResponse.json(
