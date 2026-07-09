@@ -142,6 +142,7 @@ AgentRuntimeStreamEvent / AgentRuntimeStreamConfig neutral type entry
 ProjectRuntimeClient for runtimeUrl synchronization branch
 useAgentRuntime as the only React context runtime hook
 AgentRuntimeProvider / AgentRuntimeContext naming
+getStreamClient as the only temporary LangGraph stream client escape hatch
 ```
 
 暂不迁移：
@@ -198,6 +199,7 @@ OpenCode / mock runtime provider
 - `runtimeUrl` 对应的项目 runtime 同步分支已收口到 `ProjectRuntimeClient`，不再散落在页面 Hook 中直接调用 `runtimeClient.threads.*` / `runtimeClient.runs.*`。
 - React context 已移除未使用的 `useRemoteAgent()` / `useClient()` 兼容出口，页面层只通过 `useAgentRuntime()` 访问运行时。
 - Provider / Context 命名已从 RemoteAgent 收口为 AgentRuntime，降低对 WebRemoteAgent 实现的误导。
+- Adapter 接口已删除通用 `client` 属性，仅保留 `getStreamClient()` 供当前 LangGraph `useStream()` wrapper 过渡使用。
 
 ### 3.3 迁移 run 操作
 

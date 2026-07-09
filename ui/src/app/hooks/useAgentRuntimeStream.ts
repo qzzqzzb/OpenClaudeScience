@@ -21,6 +21,6 @@ export function useAgentRuntimeStream<
 }: UseAgentRuntimeStreamOptions<StateType>): UseStream<StateType> {
   return useStream<StateType>({
     ...options,
-    client: agentRuntime.client,
+    client: agentRuntime.getStreamClient(),
   });
 }
