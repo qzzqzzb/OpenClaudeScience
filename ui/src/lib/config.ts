@@ -1,8 +1,8 @@
 import uiConfig from "../../deepagent-ui.config.json";
-import type { StreamMode } from "@langchain/langgraph-sdk";
+import type { AgentRuntimeStreamMode } from "@/lib/agent-runtime-events";
 
 export interface StreamConfig {
-  modes: StreamMode[];
+  modes: AgentRuntimeStreamMode[];
   subgraphs: boolean;
 }
 

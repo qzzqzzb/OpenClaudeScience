@@ -6,7 +6,6 @@ import {
   type Assistant,
   type Checkpoint,
   type Run,
-  type StreamMode,
   type Thread,
   type ThreadState,
 } from "@langchain/langgraph-sdk";
@@ -19,7 +18,10 @@ import type {
   TodoItem,
 } from "@/app/types/types";
 import type { StreamConfig } from "@/lib/config";
-import type { AgentRuntimeStreamEvent } from "@/lib/agent-runtime-events";
+import type {
+  AgentRuntimeStreamEvent,
+  AgentRuntimeStreamMode,
+} from "@/lib/agent-runtime-events";
 import type { ClientAgentRuntimeAdapter } from "@/lib/agent-runtime";
 import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
 import { useAgentRuntimeStream } from "@/app/hooks/useAgentRuntimeStream";
@@ -178,7 +180,7 @@ function useRuntimeLiveStream({
   runtimeClient: ProjectRuntimeClient<StateType> | null;
   threadId: string | null;
   enabled: boolean;
-  streamMode?: StreamMode | StreamMode[];
+  streamMode?: AgentRuntimeStreamMode | AgentRuntimeStreamMode[];
   appendStreamEvent: (event: AgentRuntimeStreamEvent) => void;
   onEvent: () => void;
   onSettled: () => void;

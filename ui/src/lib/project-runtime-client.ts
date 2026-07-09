@@ -3,10 +3,10 @@
 import {
   Client,
   type Run,
-  type StreamMode,
   type Thread,
   type ThreadState,
 } from "@langchain/langgraph-sdk";
+import type { AgentRuntimeStreamMode } from "@/lib/agent-runtime-events";
 import {
   loadPendingRunInputPreview,
   type PendingRunInputPreview,
@@ -23,7 +23,7 @@ export interface JoinProjectRuntimeRunStreamInput {
   runId: string;
   signal?: AbortSignal;
   lastEventId?: string;
-  streamMode?: StreamMode | StreamMode[];
+  streamMode?: AgentRuntimeStreamMode | AgentRuntimeStreamMode[];
 }
 
 export interface ProjectRuntimeClient<StateType = Record<string, unknown>> {

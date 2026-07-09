@@ -1,9 +1,18 @@
 "use client";
 
-import type { StreamMode } from "@langchain/langgraph-sdk";
+export type AgentRuntimeStreamMode =
+  | "values"
+  | "messages"
+  | "updates"
+  | "events"
+  | "debug"
+  | "tasks"
+  | "checkpoints"
+  | "custom"
+  | "messages-tuple";
 
 export interface AgentRuntimeStreamConfig {
-  modes?: StreamMode[];
+  modes?: AgentRuntimeStreamMode[];
   subgraphs?: boolean;
 }
 
