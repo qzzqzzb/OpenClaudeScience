@@ -7,6 +7,18 @@ import {
   type UseStreamOptions,
 } from "@langchain/langgraph-sdk/react";
 import type { ClientAgentRuntimeAdapter } from "@/lib/agent-runtime";
+import type {
+  AgentRuntimeRunDescriptor,
+  AgentRuntimeStopDescriptor,
+} from "@/lib/agent-runtime-runs";
+
+export type {
+  AgentRuntimeControlIntent,
+  AgentRuntimeRunDescriptor,
+  AgentRuntimeRunIntent,
+  AgentRuntimeStopDescriptor,
+  AgentRuntimeStopIntent,
+} from "@/lib/agent-runtime-runs";
 
 export interface UseAgentRuntimeStreamOptions<
   StateType extends Record<string, unknown>
@@ -21,23 +33,6 @@ export type AgentRuntimeRunInput<
 export type AgentRuntimeRunOptions<
   StateType extends Record<string, unknown>
 > = Parameters<UseStream<StateType>["submit"]>[1];
-
-export type AgentRuntimeRunIntent =
-  | "send_message"
-  | "retry_message"
-  | "single_step"
-  | "rerun_subagent_step"
-  | "continue_run"
-  | "resolve_thread"
-  | "resume_interrupt";
-
-export interface AgentRuntimeRunDescriptor {
-  intent: AgentRuntimeRunIntent;
-}
-
-export interface AgentRuntimeStopDescriptor {
-  intent: "stop_run";
-}
 
 export interface AgentRuntimeStream<
   StateType extends Record<string, unknown>
