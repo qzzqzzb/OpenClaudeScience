@@ -320,3 +320,47 @@ AgentRuntime lifecycle helper
   + LangGraph SDK run/stream/join/cancel
   -> AgentRuntimeProtocolProvider
 ```
+
+## LangGraph Protocol Runtime Provider 旁路实现
+
+当前新增：
+
+```text
+ui/src/lib/langgraph-protocol-runtime-provider.ts
+ui/tests/langgraph-protocol-runtime-provider.test.mts
+```
+
+它验证真实 LangGraph provider 的组合方式，但不直接连接真实后端。
+
+组合链路：
+
+```text
+LangGraphProtocolRuntimeProvider.run(input)
+  -> dependencies.submitRun(input)
+  -> run_started
+  -> dependencies.streamRunEvents(run)
+  -> mapLangGraphStreamEventToRuntimeEvents()
+  -> done
+```
+
+为什么用依赖注入：
+
+- 当前阶段不希望主链路改动。
+- 测试不应该依赖本地 LangGraph backend 是否启动。
+- 后续真正接 SDK 时，只需要把 `submitRun` / `streamRunEvents` 换成真实实现。
+
+中断语义：
+
+```text
+如果 stream mapper 产出 interrupt：
+  provider 不额外产出 done
+  等用户审批/继续后再进入下一次 run
+```
+
+失败语义：
+
+```text
+submitRun 抛错 -> error + done:failed
+streamRunEvents 抛错 -> error + done:failed
+AbortSignal 取消 -> error:CANCELLED + done:cancelled
+```
