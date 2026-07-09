@@ -29,8 +29,6 @@ export function RemoteAgentProvider({
   const value = useMemo(
     () => ({
       runtime,
-      agent: runtime.legacyAgent,
-      client: runtime.client,
     }),
     [runtime]
   );

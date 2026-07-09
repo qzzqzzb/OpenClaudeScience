@@ -140,6 +140,7 @@ useChat stream hook entry via useAgentRuntimeStream()
 useChat stream event subscription via agentRuntime.subscribe()
 AgentRuntimeStreamEvent / AgentRuntimeStreamConfig neutral type entry
 ProjectRuntimeClient for runtimeUrl synchronization branch
+useAgentRuntime as the only React context runtime hook
 ```
 
 暂不迁移：
@@ -194,6 +195,7 @@ OpenCode / mock runtime provider
 - `useChat.ts` 的 stream event layer 已从 `WebRemoteAgent` 改为依赖 `agentRuntime.subscribe()`。
 - stream event/config 类型已从 `remote-agent.ts` 抽到 `agent-runtime-events.ts`。
 - `runtimeUrl` 对应的项目 runtime 同步分支已收口到 `ProjectRuntimeClient`，不再散落在页面 Hook 中直接调用 `runtimeClient.threads.*` / `runtimeClient.runs.*`。
+- React context 已移除未使用的 `useRemoteAgent()` / `useClient()` 兼容出口，页面层只通过 `useAgentRuntime()` 访问运行时。
 
 ### 3.3 迁移 run 操作
 

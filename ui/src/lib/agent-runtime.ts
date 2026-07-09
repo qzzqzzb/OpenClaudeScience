@@ -53,7 +53,6 @@ export interface ClientAgentRuntimeAdapter {
   readonly deploymentUrl: string;
   readonly assistantId: string;
   readonly client: Client;
-  readonly legacyAgent: WebRemoteAgent;
   subscribe(listener: (event: AgentRuntimeStreamEvent) => void): () => void;
   getStreamSubmitOptions(
     streamConfig?: AgentRuntimeStreamConfig
@@ -82,7 +81,7 @@ export class LangGraphAgentRuntimeAdapter
   readonly provider = "langgraph" as const;
   readonly deploymentUrl: string;
   readonly assistantId: string;
-  readonly legacyAgent: WebRemoteAgent;
+  private readonly legacyAgent: WebRemoteAgent;
 
   constructor({
     apiKey,
