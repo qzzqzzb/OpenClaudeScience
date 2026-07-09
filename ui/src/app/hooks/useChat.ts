@@ -1908,7 +1908,8 @@ export function useChat({
           }),
           config: buildRunConfig(),
           ...(seededGoal ? { durability: "async" as const } : {}),
-        })
+        }),
+        { intent: "send_message" }
       );
       // Update thread list immediately when sending a message
       onHistoryRevalidate?.();
@@ -1961,7 +1962,8 @@ export function useChat({
             ],
           }),
           config: buildRunConfig(),
-        })
+        }),
+        { intent: "retry_message" }
       );
       onHistoryRevalidate?.();
     },
@@ -1998,7 +2000,12 @@ export function useChat({
               ? { interruptAfter: ["tools"] }
               : { interruptBefore: ["tools"] }),
             config: buildRunConfig(),
-          })
+          }),
+          {
+            intent: isRerunningSubagent
+              ? "rerun_subagent_step"
+              : "single_step",
+          }
         );
       } else {
         stream.submitRun(
@@ -2007,7 +2014,8 @@ export function useChat({
             ...invalidImplicitCheckpointOptions,
             config: buildRunConfig(),
             interruptBefore: ["tools"],
-          })
+          }),
+          { intent: "single_step" }
         );
       }
     },
@@ -2234,7 +2242,8 @@ export function useChat({
           ...(hasTaskToolCall
             ? { interruptAfter: ["tools"] }
             : { interruptBefore: ["tools"] }),
-        })
+        }),
+        { intent: "continue_run" }
       );
       // Update thread list when continuing stream
       onHistoryRevalidate?.();
@@ -2256,7 +2265,8 @@ export function useChat({
       withStreamSubmitOptions({
         ...invalidImplicitCheckpointOptions,
         command: { goto: "__end__", update: null },
-      })
+      }),
+      { intent: "resolve_thread" }
     );
     // Update thread list when marking thread as resolved
     onHistoryRevalidate?.();
@@ -2277,7 +2287,8 @@ export function useChat({
           ...invalidImplicitCheckpointOptions,
           command: { resume: value },
           config: buildRunConfig(),
-        })
+        }),
+        { intent: "resume_interrupt" }
       );
       // Update thread list when resuming from interrupt
       onHistoryRevalidate?.();
@@ -2301,7 +2312,7 @@ export function useChat({
       status: "stopped",
       updatedAt: Date.now(),
     }));
-    stream.stopRun();
+    stream.stopRun({ intent: "stop_run" });
   }, [stream]);
 
   const isRunLoading =

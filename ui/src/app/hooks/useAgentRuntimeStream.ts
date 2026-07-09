@@ -22,14 +22,32 @@ export type AgentRuntimeRunOptions<
   StateType extends Record<string, unknown>
 > = Parameters<UseStream<StateType>["submit"]>[1];
 
+export type AgentRuntimeRunIntent =
+  | "send_message"
+  | "retry_message"
+  | "single_step"
+  | "rerun_subagent_step"
+  | "continue_run"
+  | "resolve_thread"
+  | "resume_interrupt";
+
+export interface AgentRuntimeRunDescriptor {
+  intent: AgentRuntimeRunIntent;
+}
+
+export interface AgentRuntimeStopDescriptor {
+  intent: "stop_run";
+}
+
 export interface AgentRuntimeStream<
   StateType extends Record<string, unknown>
 > extends UseStream<StateType> {
   submitRun(
     input: AgentRuntimeRunInput<StateType>,
-    options?: AgentRuntimeRunOptions<StateType>
+    options?: AgentRuntimeRunOptions<StateType>,
+    descriptor?: AgentRuntimeRunDescriptor
   ): Promise<void>;
-  stopRun(): Promise<void>;
+  stopRun(descriptor?: AgentRuntimeStopDescriptor): Promise<void>;
 }
 
 export function useAgentRuntimeStream<
@@ -46,12 +64,16 @@ export function useAgentRuntimeStream<
   const submitRun = useCallback(
     (
       input: AgentRuntimeRunInput<StateType>,
-      submitOptions?: AgentRuntimeRunOptions<StateType>
+      submitOptions?: AgentRuntimeRunOptions<StateType>,
+      _descriptor?: AgentRuntimeRunDescriptor
     ) => stream.submit(input, submitOptions),
     [stream]
   );
 
-  const stopRun = useCallback(() => stream.stop(), [stream]);
+  const stopRun = useCallback(
+    (_descriptor?: AgentRuntimeStopDescriptor) => stream.stop(),
+    [stream]
+  );
 
   return useMemo(
     () => ({

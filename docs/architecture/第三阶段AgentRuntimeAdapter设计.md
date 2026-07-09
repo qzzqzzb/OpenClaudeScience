@@ -144,7 +144,7 @@ useAgentRuntime as the only React context runtime hook
 AgentRuntimeProvider / AgentRuntimeContext naming
 getStreamClient as the only temporary LangGraph stream client escape hatch
 AgentRuntimeStreamMode neutral stream mode type
-submitRun / stopRun transition methods
+submitRun / stopRun transition methods with intent descriptors
 ```
 
 暂不迁移：
@@ -204,6 +204,7 @@ OpenCode / mock runtime provider
 - Adapter 接口已删除通用 `client` 属性，仅保留 `getStreamClient()` 供当前 LangGraph `useStream()` wrapper 过渡使用。
 - 通用 stream 配置已改用 `AgentRuntimeStreamMode`，不再从配置层直接引用 LangGraph `StreamMode`。
 - 主 run 控制已新增 `submitRun()` / `stopRun()` 过渡入口，当前仍原样透传 LangGraph `stream.submit()` / `stream.stop()`。
+- `submitRun()` / `stopRun()` 已支持 intent descriptor，用于标记发送、重试、单步、继续、恢复中断、停止等业务意图；descriptor 当前不参与 payload 拼装。
 
 ### 3.3 迁移 run 操作
 
