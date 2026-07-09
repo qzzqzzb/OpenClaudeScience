@@ -487,6 +487,7 @@ function SkillSkeleton() {
 }
 
 function InstalledSkillCard({
+  disabled,
   enabled,
   group,
   onOpenDetails,
@@ -494,6 +495,7 @@ function InstalledSkillCard({
   skill,
   updating,
 }: {
+  disabled?: boolean;
   enabled: boolean;
   group: "default" | "science" | "imported";
   onOpenDetails: (skill: SkillEntry) => void;
@@ -547,7 +549,7 @@ function InstalledSkillCard({
         {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         <Switch
           checked={enabled}
-          disabled={updating}
+          disabled={disabled || updating}
           onCheckedChange={(checked) => onToggleEnabled(skill, checked)}
           aria-label={t(enabled ? "disableSkillName" : "enableSkillName", {
             name: display.name,
@@ -562,6 +564,7 @@ function InstalledSkillCard({
 }
 
 function ScienceSkillCard({
+  disabled,
   enabled,
   enableHref,
   installDisabled,
@@ -572,6 +575,7 @@ function ScienceSkillCard({
   updating,
   skill,
 }: {
+  disabled?: boolean;
   enabled: boolean;
   enableHref: string;
   installDisabled: boolean;
@@ -636,7 +640,7 @@ function ScienceSkillCard({
               {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               <Switch
                 checked={enabled}
-                disabled={updating}
+                disabled={disabled || updating}
                 onCheckedChange={(checked) =>
                   onToggleEnabled(installedSkill, checked)
                 }
@@ -731,6 +735,7 @@ export function SkillsMarketplace({
   );
   const [detailSkill, setDetailSkill] = useState<SkillEntry | null>(null);
   const selectedSaveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const pendingBackendApplyVersionRef = useRef(0);
 
   const workbenchHref = useMemo(
     () => storedWorkbenchHref ?? workbenchHrefFromSearchParams(searchParams),
@@ -744,6 +749,8 @@ export function SkillsMarketplace({
     pickingLocalFolder ||
     checkingStatus ||
     restarting;
+  const skillToggleBusy =
+    loading || importingSkill !== null || updatingSkillKey !== null;
   const localSkillImportBusy = pickingLocalFolder || importingSkill !== null;
   const cloudSkillImportBusy = importingSkill !== null;
   const preparedSearchQuery = useMemo(
@@ -947,6 +954,7 @@ export function SkillsMarketplace({
         },
         t("skillInstallFailed")
       );
+      pendingBackendApplyVersionRef.current += 1;
       setData({
         ...nextData,
         requiresRestart: true,
@@ -1007,7 +1015,7 @@ export function SkillsMarketplace({
       }
     }, []);
 
-  const restartBackendWhenIdle = useCallback(async () => {
+  const restartBackendWhenIdle = useCallback(async (applyVersion: number) => {
     setRestarting(true);
     try {
       const restart = await restartBackend();
@@ -1015,7 +1023,9 @@ export function SkillsMarketplace({
         throw new Error(restart.message || t("backendApplyFailed"));
       }
 
-      setAutoRestart(false);
+      const hasNewerPendingApply =
+        pendingBackendApplyVersionRef.current !== applyVersion;
+      setAutoRestart(hasNewerPendingApply);
       setBackendStatus({
         status: "idle",
         message: restart.message,
@@ -1025,12 +1035,16 @@ export function SkillsMarketplace({
       });
       setData((current) => ({
         ...current,
-        requiresRestart: false,
+        requiresRestart: hasNewerPendingApply
+          ? current.requiresRestart
+          : false,
         restart,
       }));
       setConnections((current) => ({
         ...current,
-        requiresRestart: false,
+        requiresRestart: hasNewerPendingApply
+          ? current.requiresRestart
+          : false,
       }));
     } catch (restartError) {
       setError(
@@ -1071,6 +1085,7 @@ export function SkillsMarketplace({
       setScpApiKey("");
       setBackendStatus(null);
       if (nextConnections.requiresRestart) {
+        pendingBackendApplyVersionRef.current += 1;
         setAutoRestart(true);
       }
       toast.success(nextConnections.message || t("scpConfigSaved"), {
@@ -1104,6 +1119,7 @@ export function SkillsMarketplace({
       setMcpConfigText(nextConnections.mcp.configText);
       setBackendStatus(null);
       if (nextConnections.requiresRestart) {
+        pendingBackendApplyVersionRef.current += 1;
         setAutoRestart(true);
       }
       toast.success(nextConnections.message || t("mcpConfigSaved"), {
@@ -1305,7 +1321,7 @@ export function SkillsMarketplace({
   }
 
   async function toggleSkillEnabled(skill: SkillEntry, enabled: boolean) {
-    if (actionBusy) {
+    if (skillToggleBusy) {
       return;
     }
 
@@ -1361,7 +1377,7 @@ export function SkillsMarketplace({
       try {
         const status = await checkBackendStatus();
         if (!cancelled && status.status === "idle") {
-          await restartBackendWhenIdle();
+          await restartBackendWhenIdle(pendingBackendApplyVersionRef.current);
         }
       } catch {
         // Keep this quiet; install remains saved and the next poll can retry.
@@ -1688,6 +1704,7 @@ export function SkillsMarketplace({
                     {filteredInstalledScienceSkills.map((skill) => (
                       <InstalledSkillCard
                         key={skill.key}
+                        disabled={skillToggleBusy}
                         enabled={selectedSkillKeys.has(skill.key)}
                         group="science"
                         onOpenDetails={setDetailSkill}
@@ -1800,6 +1817,7 @@ export function SkillsMarketplace({
                     {filteredScienceSkills.map((skill) => (
                       <ScienceSkillCard
                         key={skill.id}
+                        disabled={skillToggleBusy}
                         enabled={enabledScienceSkillIds.has(skill.id)}
                         enableHref={withEnabledSkill(workbenchHref, skill.id)}
                         installDisabled={loading}
@@ -1850,6 +1868,7 @@ export function SkillsMarketplace({
                     {filteredDefaultSkills.map((skill) => (
                       <InstalledSkillCard
                         key={skill.key}
+                        disabled={skillToggleBusy}
                         enabled={selectedSkillKeys.has(skill.key)}
                         group="default"
                         onOpenDetails={setDetailSkill}
@@ -1884,6 +1903,7 @@ export function SkillsMarketplace({
                     {filteredInstalledScienceSkills.map((skill) => (
                       <InstalledSkillCard
                         key={skill.key}
+                        disabled={skillToggleBusy}
                         enabled={selectedSkillKeys.has(skill.key)}
                         group="science"
                         onOpenDetails={setDetailSkill}
@@ -1918,6 +1938,7 @@ export function SkillsMarketplace({
                     {filteredImportedSkills.map((skill) => (
                       <InstalledSkillCard
                         key={skill.key}
+                        disabled={skillToggleBusy}
                         enabled={selectedSkillKeys.has(skill.key)}
                         group="imported"
                         onOpenDetails={setDetailSkill}
