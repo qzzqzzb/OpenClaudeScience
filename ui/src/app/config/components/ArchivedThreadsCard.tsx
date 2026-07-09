@@ -6,7 +6,7 @@ import { Archive, ArchiveRestore, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useThreads, type ThreadItem } from "@/app/hooks/useThreads";
-import { RemoteAgentProvider } from "@/providers/ClientProvider";
+import { AgentRuntimeProvider } from "@/providers/ClientProvider";
 import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
 import { getConfig, type StandaloneConfig } from "@/lib/config";
 import { cn } from "@/lib/utils";
@@ -219,12 +219,12 @@ export function ArchivedThreadsCard() {
     config.langsmithApiKey || process.env.NEXT_PUBLIC_LANGSMITH_API_KEY || "";
 
   return (
-    <RemoteAgentProvider
+    <AgentRuntimeProvider
       deploymentUrl={config.deploymentUrl}
       assistantId={config.assistantId}
       apiKey={apiKey}
     >
       <ArchivedThreadsCardContent />
-    </RemoteAgentProvider>
+    </AgentRuntimeProvider>
   );
 }

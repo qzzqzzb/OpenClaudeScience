@@ -45,7 +45,7 @@ import {
   type StandaloneConfig,
 } from "@/lib/config";
 import { Assistant } from "@langchain/langgraph-sdk";
-import { RemoteAgentProvider } from "@/providers/ClientProvider";
+import { AgentRuntimeProvider } from "@/providers/ClientProvider";
 import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
 import {
   Select,
@@ -1973,7 +1973,7 @@ function HomePageContent() {
       };
 
   return (
-    <RemoteAgentProvider
+    <AgentRuntimeProvider
       key={`${activeDeploymentUrl}:${activeAssistantId}`}
       deploymentUrl={activeDeploymentUrl}
       assistantId={activeAssistantId}
@@ -2027,7 +2027,7 @@ function HomePageContent() {
           }
         }}
       />
-    </RemoteAgentProvider>
+    </AgentRuntimeProvider>
   );
 }
 

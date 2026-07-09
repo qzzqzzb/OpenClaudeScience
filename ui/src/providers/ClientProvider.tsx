@@ -2,21 +2,21 @@
 
 import { useMemo, ReactNode } from "react";
 import { createAgentRuntimeAdapter } from "@/lib/agent-runtime";
-import { RemoteAgentContext } from "@/providers/AgentRuntimeContext";
+import { AgentRuntimeContext } from "@/providers/AgentRuntimeContext";
 
-interface ClientProviderProps {
+interface AgentRuntimeProviderProps {
   children: ReactNode;
   deploymentUrl: string;
   assistantId: string;
   apiKey: string;
 }
 
-export function RemoteAgentProvider({
+export function AgentRuntimeProvider({
   children,
   deploymentUrl,
   assistantId,
   apiKey,
-}: ClientProviderProps) {
+}: AgentRuntimeProviderProps) {
   const runtime = useMemo(() => {
     return createAgentRuntimeAdapter({
       provider: "langgraph",
@@ -34,8 +34,8 @@ export function RemoteAgentProvider({
   );
 
   return (
-    <RemoteAgentContext.Provider value={value}>
+    <AgentRuntimeContext.Provider value={value}>
       {children}
-    </RemoteAgentContext.Provider>
+    </AgentRuntimeContext.Provider>
   );
 }
