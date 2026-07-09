@@ -205,3 +205,39 @@ useChat.ts
 useAgentRuntimeStream()
 LangGraphAgentRuntimeAdapter
 ```
+
+## LangGraph Stream Event 映射
+
+当前新增旁路 mapper：
+
+```text
+ui/src/lib/langgraph-runtime-event-mapper.ts
+ui/tests/langgraph-runtime-event-mapper.test.mts
+```
+
+它负责把现有 `WebRemoteAgent` 捕获到的 `AgentRuntimeStreamEvent` 转成中立协议事件。
+
+当前映射表：
+
+| LangGraph stream | 中立事件 | 说明 |
+| --- | --- | --- |
+| `messages` / `messages-tuple` assistant 文本 chunk | `message_delta` | 只转换文本增量 |
+| assistant `tool_calls` | `tool_call` | 支持 `tool_calls` 和 `additional_kwargs.tool_calls` |
+| tool message | `tool_result` | 用 `tool_call_id` 关联工具调用 |
+| `__interrupt__` | `interrupt` | 优先于 state 映射 |
+| `values` / `updates` | `state` | 仅诊断模式 `includeStateEvents=true` 输出 |
+| `error` | `error` | 保留原始 details |
+
+当前明确不映射：
+
+```text
+run_started
+message_completed
+done
+```
+
+原因：
+
+- 当前 tapped LangGraph SDK stream event 只有 `event/data/id`，没有稳定 run 生命周期边界。
+- `messages-tuple` chunk 不能可靠判断 assistant 消息已经完成。
+- 这三类事件后续应该从 run submit/join 生命周期或更稳定的 runtime metadata 中补齐。
