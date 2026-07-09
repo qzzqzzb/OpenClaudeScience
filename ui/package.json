@@ -23,7 +23,9 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:domain-adapters": "node --test --experimental-strip-types tests/domain-adapter-contracts.test.mts",
+    "test:chat-runtime-facade": "node --test --experimental-strip-types tests/chat-runtime-facade.test.mts"
   },
   "dependencies": {
     "@langchain/core": "^1.1.19",

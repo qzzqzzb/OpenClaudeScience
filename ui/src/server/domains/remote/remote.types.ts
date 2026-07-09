@@ -80,3 +80,31 @@ export type RemoteStreamEvent =
   | { type: "log"; message: string }
   | { type: "done"; result: RemoteOperationResult }
   | { type: "error"; error: string };
+
+export interface RemoteEnsureBackendInput {
+  resourceId: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+export interface RemoteBackendCliPushInput extends RemoteBackendCliPushRequest {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+export interface RemoteAdapter {
+  listSshHosts(): Promise<SshHostEntry[]>;
+  testConnection(input: RemoteSshTestInput): Promise<RemoteSshTestResult>;
+  ensureBackend(
+    input: RemoteEnsureBackendInput,
+    onLog?: (message: string) => void
+  ): Promise<RemoteConnectionEnsureResult>;
+  setupBackend(
+    input: RemoteConnectionSetupRequest,
+    onLog?: (message: string) => void
+  ): Promise<RemoteConnectionSetupResult>;
+  pushBackendCli(
+    input: RemoteBackendCliPushInput,
+    onLog?: (message: string) => void
+  ): Promise<RemoteBackendCliPushResult>;
+}

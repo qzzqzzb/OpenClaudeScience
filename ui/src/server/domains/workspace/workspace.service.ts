@@ -4,13 +4,10 @@ import {
   isOfficePreviewKind,
 } from "@/app/api/workspace/_lib/office-preview";
 import {
-  listWorkspaceDirectoryEntries,
-  searchWorkspaceFiles,
+  workspaceDirectoryAdapter,
 } from "./adapters/workspaceDirectory.adapter";
 import {
-  readWorkspaceFileData,
-  readWorkspaceRawFile,
-  streamLocalWorkspaceRawFile,
+  workspaceFileAdapter,
 } from "./adapters/workspaceFile.adapter";
 import {
   assertReadableWorkspaceFilePath,
@@ -47,7 +44,11 @@ export async function listWorkspaceDirectory({
   resourceId,
   workspaceId,
 }: WorkspacePathSelection): Promise<ListWorkspaceDirectoryOutput> {
-  return listWorkspaceDirectoryEntries(requestedPath, resourceId, workspaceId);
+  return workspaceDirectoryAdapter.listEntries({
+    path: requestedPath,
+    resourceId,
+    workspaceId,
+  });
 }
 
 export async function searchWorkspaceDirectoryFiles({
@@ -57,9 +58,12 @@ export async function searchWorkspaceDirectoryFiles({
   workspaceId,
   limit,
 }: SearchWorkspaceFilesInput): Promise<SearchWorkspaceFilesOutput> {
-  const entries = await searchWorkspaceFiles(query, resourceId, workspaceId, {
-    relativePath: requestedPath,
-    maxResults: Number.isFinite(limit) ? limit : undefined,
+  const entries = await workspaceDirectoryAdapter.searchFiles({
+    query,
+    path: requestedPath,
+    resourceId,
+    workspaceId,
+    limit,
   });
 
   return {
@@ -74,11 +78,11 @@ export async function readWorkspaceFile({
   workspaceId,
 }: ReadWorkspaceFileInput): Promise<ReadWorkspaceFileOutput> {
   assertReadableWorkspaceFilePath(requestedPath);
-  const fileData = await readWorkspaceFileData(
-    requestedPath,
+  const fileData = await workspaceFileAdapter.readFile({
+    path: requestedPath,
     resourceId,
-    workspaceId
-  );
+    workspaceId,
+  });
 
   if (!fileData.isFile) {
     throw new Error("Selected workspace path is not a file.");
@@ -118,11 +122,11 @@ export async function readWorkspaceFile({
 
   if (isOfficePreviewKind(previewKind)) {
     try {
-      const rawFile = await readWorkspaceRawFile(
-        fileData.path,
+      const rawFile = await workspaceFileAdapter.readRawFile({
+        path: fileData.path,
         resourceId,
-        workspaceId
-      );
+        workspaceId,
+      });
       payload.officePreview = buildOfficePreview(rawFile.path, rawFile.data);
     } catch (previewError) {
       payload.officePreview = {
@@ -148,12 +152,12 @@ export async function readWorkspaceRawFileContent({
   assertReadableWorkspaceFilePath(requestedPath);
 
   if (isLocalWorkspaceResource(resourceId)) {
-    const fileData = await streamLocalWorkspaceRawFile(
-      requestedPath,
+    const fileData = await workspaceFileAdapter.streamLocalRawFile({
+      path: requestedPath,
       resourceId,
       workspaceId,
-      rangeHeader
-    );
+      rangeHeader,
+    });
     if (!fileData.isFile) {
       throw new Error("Selected workspace path is not a file.");
     }
@@ -163,11 +167,11 @@ export async function readWorkspaceRawFileContent({
     };
   }
 
-  const fileData = await readWorkspaceRawFile(
-    requestedPath,
+  const fileData = await workspaceFileAdapter.readRawFile({
+    path: requestedPath,
     resourceId,
-    workspaceId
-  );
+    workspaceId,
+  });
   if (!fileData.isFile) {
     throw new Error("Selected workspace path is not a file.");
   }

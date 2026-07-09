@@ -10,6 +10,7 @@ import {
   listStoredComputeJobs,
 } from "./adapters/computeStore.adapter";
 import type {
+  ComputeAdapter,
   RemoteJobRecord,
   RemoteJobSnapshot,
   SubmitRemoteJobRequest,
@@ -17,8 +18,16 @@ import type {
   UpsertComputeHostInput,
 } from "./compute.types";
 
+export const computeAdapter: ComputeAdapter = {
+  listHosts: listStoredComputeHosts,
+  upsertHost: saveComputeHost,
+  listJobs: listStoredComputeJobs,
+  submitJob: submitComputeJob,
+  getJob: ({ jobId }) => readComputeJobSnapshot(jobId),
+};
+
 export async function getComputeHosts(): Promise<SshComputeHost[]> {
-  return listStoredComputeHosts();
+  return computeAdapter.listHosts();
 }
 
 export async function upsertComputeHost(
@@ -26,11 +35,11 @@ export async function upsertComputeHost(
   input: UpsertComputeHostInput
 ): Promise<SshComputeHost> {
   assertComputeRequestAllowed(request);
-  return saveComputeHost(input);
+  return computeAdapter.upsertHost(input);
 }
 
 export async function getComputeJobs(): Promise<RemoteJobRecord[]> {
-  return listStoredComputeJobs();
+  return computeAdapter.listJobs();
 }
 
 export async function submitRemoteComputeJob(
@@ -38,11 +47,11 @@ export async function submitRemoteComputeJob(
   input: SubmitRemoteJobRequest
 ): Promise<RemoteJobRecord> {
   assertComputeRequestAllowed(request);
-  return submitComputeJob(input);
+  return computeAdapter.submitJob(input);
 }
 
 export async function getComputeJobSnapshot(
   jobId: string
 ): Promise<RemoteJobSnapshot> {
-  return readComputeJobSnapshot(jobId);
+  return computeAdapter.getJob({ jobId });
 }

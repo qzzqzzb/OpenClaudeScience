@@ -10,12 +10,24 @@ import {
 import type {
   RemoteBackendCliPushRequest,
   RemoteConnectionSetupRequest,
+  RemoteAdapter,
   RemoteOperationResult,
   RemoteSshTestInput,
   RemoteSshTestResult,
   RemoteStreamEvent,
   SshHostEntry,
 } from "./remote.types";
+
+export const remoteAdapter: RemoteAdapter = {
+  listSshHosts: listRemoteSshHosts,
+  testConnection: testRemoteSshConnection,
+  ensureBackend: ({ resourceId }, onLog) =>
+    ensureRemoteRuntime(resourceId, onLog ?? (() => undefined)),
+  setupBackend: (input, onLog) =>
+    setupRemoteRuntime(input, onLog ?? (() => undefined)),
+  pushBackendCli: (input, onLog) =>
+    pushRemoteRuntimeBackendCli(input, onLog ?? (() => undefined)),
+};
 
 type RemoteStreamOperation = (
   onLog: (message: string) => void
@@ -68,7 +80,10 @@ export function createEnsureRemoteRuntimeStream(
     initialMessage: "检查远程 backend runtime 版本...",
     fallbackError: "远程 backend runtime 同步失败。",
     operation: (onLog) =>
-      ensureRemoteRuntime(typeof resourceId === "string" ? resourceId : "", onLog),
+      remoteAdapter.ensureBackend(
+        { resourceId: typeof resourceId === "string" ? resourceId : "" },
+        onLog
+      ),
   });
 }
 
@@ -79,7 +94,7 @@ export function createSetupRemoteRuntimeStream(
     initialMessage: "开始配置远程 runtime...",
     fallbackError: "远程机器配置失败。",
     operation: (onLog) =>
-      setupRemoteRuntime(body as RemoteConnectionSetupRequest, onLog),
+      remoteAdapter.setupBackend(body as RemoteConnectionSetupRequest, onLog),
   });
 }
 
@@ -90,16 +105,16 @@ export function createPushRemoteBackendCliStream(
     initialMessage: "Starting backend CLI push...",
     fallbackError: "Backend CLI push failed.",
     operation: (onLog) =>
-      pushRemoteRuntimeBackendCli(body as RemoteBackendCliPushRequest, onLog),
+      remoteAdapter.pushBackendCli(body as RemoteBackendCliPushRequest, onLog),
   });
 }
 
 export async function testRemoteConnection(
   input: RemoteSshTestInput
 ): Promise<RemoteSshTestResult> {
-  return testRemoteSshConnection(input);
+  return remoteAdapter.testConnection(input);
 }
 
 export async function getRemoteSshHosts(): Promise<SshHostEntry[]> {
-  return listRemoteSshHosts();
+  return remoteAdapter.listSshHosts();
 }

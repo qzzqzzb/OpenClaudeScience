@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { getWorkspaceRoot } from "@/app/api/workspace/_lib/workspace";
+import { getWorkspaceRoot } from "@/server/shared/adapters/workspaceRoot.adapter";
 import type {
   EnvUpdates,
   SkillConnectionsResponse,

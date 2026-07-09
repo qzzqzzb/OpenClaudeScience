@@ -1,4 +1,5 @@
 import type {
+  WorkspaceEntry,
   WorkspaceFileResponse,
   WorkspaceListResponse,
   WorkspaceSearchResponse,
@@ -59,3 +60,26 @@ export type WorkspaceRawFileResult =
 export type ListWorkspaceDirectoryOutput = WorkspaceListResponse;
 export type SearchWorkspaceFilesOutput = WorkspaceSearchResponse;
 export type ReadWorkspaceFileOutput = WorkspaceFileResponse;
+
+export interface WorkspaceDirectoryAdapter {
+  listEntries(
+    input: WorkspacePathSelection
+  ): Promise<ListWorkspaceDirectoryOutput>;
+  searchFiles(input: SearchWorkspaceFilesInput): Promise<WorkspaceEntry[]>;
+}
+
+export interface WorkspaceFileAdapter {
+  readFile(input: ReadWorkspaceFileInput): Promise<WorkspaceFileData>;
+  readRawFile(
+    input: ReadWorkspaceFileInput
+  ): Promise<WorkspaceRawFileBufferData>;
+  streamLocalRawFile(
+    input: ReadWorkspaceRawFileInput
+  ): Promise<WorkspaceRawFileStreamData>;
+  writeRawFile(input: {
+    path: string;
+    data: Buffer;
+    resourceId?: string | null;
+    workspaceId?: string | null;
+  }): Promise<WorkspaceFileData>;
+}

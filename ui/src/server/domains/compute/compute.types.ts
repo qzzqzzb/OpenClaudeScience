@@ -84,3 +84,11 @@ export interface UpsertComputeHostInput {
   scratchRoot?: unknown;
   notes?: unknown;
 }
+
+export interface ComputeAdapter {
+  listHosts(): Promise<SshComputeHost[]>;
+  upsertHost(input: UpsertComputeHostInput): Promise<SshComputeHost>;
+  listJobs(): Promise<RemoteJobRecord[]>;
+  submitJob(input: SubmitRemoteJobRequest): Promise<RemoteJobRecord>;
+  getJob(input: { jobId: string }): Promise<RemoteJobSnapshot>;
+}

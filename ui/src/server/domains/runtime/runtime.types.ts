@@ -36,3 +36,22 @@ export interface DesktopRuntimeConfig {
   defaultResourceId: string;
   resources: RuntimeResourceConfig[];
 }
+
+export interface RuntimeReadyInput {
+  timeoutMs?: number;
+}
+
+export interface RuntimeStatusInput {
+  timeoutMs?: number;
+}
+
+export interface RuntimeRestartInput {
+  timeoutMs?: number;
+}
+
+export interface RuntimeAdapter {
+  isReady(input?: RuntimeReadyInput): Promise<RuntimeReadyResult>;
+  getStatus(input?: RuntimeStatusInput): Promise<BackendStatusResult>;
+  restart(input?: RuntimeRestartInput): Promise<BackendRestartResult>;
+  getDesktopConfig(): Promise<DesktopRuntimeConfig>;
+}

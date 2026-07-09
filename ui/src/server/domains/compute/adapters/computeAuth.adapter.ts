@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 import type { NextRequest } from "next/server";
-import { getWorkspaceRoot } from "@/app/api/workspace/_lib/workspace";
+import { getWorkspaceRoot } from "@/server/shared/adapters/workspaceRoot.adapter";
 
 const STATE_DIR = path.join(getWorkspaceRoot(), ".internagents", "compute");
 const TOKEN_FILE = path.join(STATE_DIR, "api-token");

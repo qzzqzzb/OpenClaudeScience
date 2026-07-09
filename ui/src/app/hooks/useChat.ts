@@ -22,7 +22,6 @@ import type {
   AgentRuntimeStreamEvent,
   AgentRuntimeStreamMode,
 } from "@/lib/agent-runtime-events";
-import type { ClientAgentRuntimeAdapter } from "@/lib/agent-runtime";
 import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
 import { useAgentRuntimeStream } from "@/app/hooks/useAgentRuntimeStream";
 import { useQueryState } from "nuqs";
@@ -39,6 +38,10 @@ import {
   createProjectRuntimeClient,
   type ProjectRuntimeClient,
 } from "@/lib/project-runtime-client";
+import {
+  createChatRuntimeFacade,
+  type ChatRuntimeFacade,
+} from "@/lib/chat-runtime-facade";
 import {
   findStateWithMessages,
   mergeValuesWithMessages,
@@ -170,6 +173,7 @@ function latestActiveRuntimeRun(runs: Run[]): Run | undefined {
 
 function useRuntimeLiveStream({
   runtimeClient,
+  runtimeFacade,
   threadId,
   enabled,
   streamMode,
@@ -178,6 +182,7 @@ function useRuntimeLiveStream({
   onSettled,
 }: {
   runtimeClient: ProjectRuntimeClient<StateType> | null;
+  runtimeFacade: ChatRuntimeFacade<StateType>;
   threadId: string | null;
   enabled: boolean;
   streamMode?: AgentRuntimeStreamMode | AgentRuntimeStreamMode[];
@@ -214,7 +219,7 @@ function useRuntimeLiveStream({
 
     const joinLatestRuntimeRun = async () => {
       try {
-        const runs = await runtimeClient.listRuns(threadId, { limit: 10 });
+        const runs = await runtimeFacade.listRuntimeRuns(threadId, { limit: 10 });
         if (cancelled) return;
 
         const activeRun = latestActiveRuntimeRun(runs);
@@ -228,7 +233,7 @@ function useRuntimeLiveStream({
         const lastEventId = lastEventIdsRef.current.get(runId) ?? "-1";
         controller = new AbortController();
 
-        for await (const event of runtimeClient.joinRunStream({
+        for await (const event of runtimeFacade.joinRuntimeRunStream({
           threadId,
           runId,
           signal: controller.signal,
@@ -281,6 +286,7 @@ function useRuntimeLiveStream({
     onEvent,
     onSettled,
     runtimeClient,
+    runtimeFacade,
     streamMode,
     threadId,
   ]);
@@ -300,10 +306,12 @@ function runtimeRunSnapshot(run?: Run): RuntimeRunSnapshot | null {
 
 function useRuntimeRunSnapshot({
   runtimeClient,
+  runtimeFacade,
   threadId,
   enabled,
 }: {
   runtimeClient: ProjectRuntimeClient<StateType> | null;
+  runtimeFacade: ChatRuntimeFacade<StateType>;
   threadId: string | null;
   enabled: boolean;
 }): RuntimeRunSnapshot | null {
@@ -319,7 +327,7 @@ function useRuntimeRunSnapshot({
 
     const refresh = async () => {
       try {
-        const runs = await runtimeClient.listRuns(threadId, { limit: 10 });
+        const runs = await runtimeFacade.listRuntimeRuns(threadId, { limit: 10 });
         if (cancelled) {
           return;
         }
@@ -339,7 +347,7 @@ function useRuntimeRunSnapshot({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [enabled, runtimeClient, threadId]);
+  }, [enabled, runtimeClient, runtimeFacade, threadId]);
 
   return snapshot;
 }
@@ -802,12 +810,12 @@ function useDelayedBoolean(value: boolean, delayMs: number): boolean {
 }
 
 async function loadThreadSnapshot({
-  agentRuntime,
   runtimeClient,
+  runtimeFacade,
   threadId,
 }: {
-  agentRuntime: ClientAgentRuntimeAdapter;
   runtimeClient: ProjectRuntimeClient<StateType> | null;
+  runtimeFacade: ChatRuntimeFacade<StateType>;
   threadId: string;
 }): Promise<ThreadState<StateType>[]> {
   let primaryState: ThreadState<StateType> | null = null;
@@ -816,7 +824,7 @@ async function loadThreadSnapshot({
 
   try {
     const mainState = sanitizeThreadState(
-      await agentRuntime.getThreadState<StateType>(threadId)
+      await runtimeFacade.getMainThreadState<StateType>(threadId)
     );
     primaryState = mainState;
     hasMainStateMessages = stateHasMessages(mainState);
@@ -825,7 +833,7 @@ async function loadThreadSnapshot({
   }
 
   try {
-    const threadRecord = await agentRuntime.getThread<StateType>(threadId);
+    const threadRecord = await runtimeFacade.getMainThread<StateType>(threadId);
     const threadState = primaryState
       ? mergeThreadRecord(primaryState, threadRecord)
       : threadToState(threadId, threadRecord);
@@ -838,7 +846,7 @@ async function loadThreadSnapshot({
   }
 
   try {
-    const mainHistory = await agentRuntime.getThreadHistory<StateType>({
+    const mainHistory = await runtimeFacade.getMainThreadHistory<StateType>({
       threadId,
       limit: 80,
     });
@@ -863,11 +871,9 @@ async function loadThreadSnapshot({
     return [sanitizeThreadState(primaryState)];
   }
 
-  const pendingRunPreview =
-    (await agentRuntime.getPendingRunInputPreview(threadId)) ??
-    (runtimeClient
-      ? await runtimeClient.getPendingRunInputPreview(threadId)
-      : null);
+  const pendingRunPreview = await runtimeFacade.getPendingRunInputPreview(
+    threadId
+  );
   if (pendingRunPreview?.status === "error") {
     return [mergePendingRunState(threadId, primaryState, pendingRunPreview)];
   }
@@ -892,7 +898,7 @@ async function loadThreadSnapshot({
   if (runtimeClient) {
     try {
       const runtimeState = sanitizeThreadState(
-        await runtimeClient.getThreadState<StateType>(threadId)
+        await runtimeFacade.getRuntimeThreadState<StateType>(threadId)
       );
       if (stateHasMessages(runtimeState)) {
         return [mergeRuntimeState(runtimeState)];
@@ -905,7 +911,9 @@ async function loadThreadSnapshot({
     }
 
     try {
-      const runtimeThread = await runtimeClient.getThread<StateType>(threadId);
+      const runtimeThread = await runtimeFacade.getRuntimeThread<StateType>(
+        threadId
+      );
       const runtimeState = threadToState(threadId, runtimeThread);
       if (stateHasMessages(runtimeState)) {
         return [mergeRuntimeState(runtimeState)];
@@ -915,7 +923,7 @@ async function loadThreadSnapshot({
     }
 
     try {
-      const runtimeHistory = await runtimeClient.getThreadHistory<StateType>(
+      const runtimeHistory = await runtimeFacade.getRuntimeThreadHistory<StateType>(
         threadId,
         { limit: 80 }
       );
@@ -943,14 +951,14 @@ async function loadThreadSnapshot({
 }
 
 function useThreadSnapshot({
-  agentRuntime,
   runtimeClient,
+  runtimeFacade,
   threadId,
   externalThread,
   cacheScope,
 }: {
-  agentRuntime: ClientAgentRuntimeAdapter;
   runtimeClient: ProjectRuntimeClient<StateType> | null;
+  runtimeFacade: ChatRuntimeFacade<StateType>;
   threadId: string | null;
   externalThread?: UseStreamThread<StateType>;
   cacheScope: string;
@@ -1022,8 +1030,8 @@ function useThreadSnapshot({
           cacheRequestId = existingEntry?.requestId;
         } else {
           pending = loadThreadSnapshot({
-            agentRuntime,
             runtimeClient,
+            runtimeFacade,
             threadId: targetThreadId,
           });
           cacheRequestId = ++threadSnapshotRequestSequence;
@@ -1073,7 +1081,7 @@ function useThreadSnapshot({
         }
       }
     },
-    [agentRuntime, cacheScope, runtimeClient, threadId]
+    [cacheScope, runtimeClient, runtimeFacade, threadId]
   );
 
   useEffect(() => {
@@ -1451,25 +1459,20 @@ export function useChat({
         : null,
     [runtimeUrl]
   );
+  const runtimeFacade = useMemo(
+    () =>
+      createChatRuntimeFacade<StateType>({
+        agentRuntime,
+        runtimeClient,
+        runtimeUrl,
+        resourceId,
+        workspaceId,
+      }),
+    [agentRuntime, resourceId, runtimeClient, runtimeUrl, workspaceId]
+  );
   const streamEventLayer = useStreamEventLayer(agentRuntime, threadId ?? null);
   const { clearStreamEvents } = streamEventLayer;
-  const threadSnapshotCacheScope = useMemo(
-    () =>
-      [
-        agentRuntime.deploymentUrl,
-        agentRuntime.assistantId,
-        runtimeUrl || "",
-        resourceId || "",
-        workspaceId || "",
-      ].join("|"),
-    [
-      agentRuntime.assistantId,
-      agentRuntime.deploymentUrl,
-      resourceId,
-      runtimeUrl,
-      workspaceId,
-    ]
-  );
+  const threadSnapshotCacheScope = runtimeFacade.cacheScope;
   const markRunStarting = useCallback(() => {
     setVisibleError(undefined);
     setLocalRunInFlight(true);
@@ -1479,14 +1482,15 @@ export function useChat({
     });
   }, []);
   const threadSnapshot = useThreadSnapshot({
-    agentRuntime,
     runtimeClient,
+    runtimeFacade,
     threadId: threadId ?? null,
     externalThread: thread,
     cacheScope: threadSnapshotCacheScope,
   });
   const runtimeRunSnapshot = useRuntimeRunSnapshot({
     runtimeClient,
+    runtimeFacade,
     threadId: threadId ?? null,
     enabled: Boolean(threadId && runtimeClient),
   });
@@ -1751,6 +1755,7 @@ export function useChat({
 
   useRuntimeLiveStream({
     runtimeClient,
+    runtimeFacade,
     threadId: threadId ?? null,
     enabled: shouldSubscribeRuntimeLiveStream,
     streamMode: streamSubmitOptions.streamMode,
@@ -2043,9 +2048,9 @@ export function useChat({
       if (!threadId) return;
       // TODO: missing a way how to revalidate the internal state
       // I think we do want to have the ability to externally manage the state
-      await agentRuntime.updateState({ threadId, values: { files } });
+      await runtimeFacade.updateState({ threadId, values: { files } });
     },
-    [agentRuntime, threadId]
+    [runtimeFacade, threadId]
   );
 
   const updateThreadSkills = useCallback(
@@ -2063,7 +2068,7 @@ export function useChat({
 
       setOptimisticThreadSkills(normalized);
       try {
-        await agentRuntime.updateState({
+        await runtimeFacade.updateState({
           threadId,
           values: { threadSkills: normalized },
         });
@@ -2075,7 +2080,7 @@ export function useChat({
         throw error;
       }
     },
-    [agentRuntime, onHistoryRevalidate, threadId, threadSnapshot]
+    [runtimeFacade, onHistoryRevalidate, threadId, threadSnapshot]
   );
 
   const isThreadScopedStateLoading = Boolean(
@@ -2168,7 +2173,7 @@ export function useChat({
         return;
       }
 
-      await agentRuntime.updateThreadMetadata({
+      await runtimeFacade.updateThreadMetadata({
         threadId,
         metadata: {
           ...threadMetadata,
@@ -2181,8 +2186,8 @@ export function useChat({
       onHistoryRevalidate?.();
     },
     [
-      agentRuntime,
       onHistoryRevalidate,
+      runtimeFacade,
       threadId,
       threadMetadata,
       threadSnapshot,
@@ -2207,7 +2212,7 @@ export function useChat({
 
     let cancelled = false;
 
-    void agentRuntime
+    void runtimeFacade
       .updateThreadMetadata({
         threadId,
         metadata: {
@@ -2232,8 +2237,8 @@ export function useChat({
       cancelled = true;
     };
   }, [
-    agentRuntime,
     onHistoryRevalidate,
+    runtimeFacade,
     threadId,
     threadMetadata,
     threadSnapshot,
