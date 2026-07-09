@@ -24,7 +24,11 @@ import type {
 } from "@/lib/agent-runtime-events";
 import type { ClientAgentRuntimeAdapter } from "@/lib/agent-runtime";
 import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
-import { useAgentRuntimeStream } from "@/app/hooks/useAgentRuntimeStream";
+import {
+  useAgentRuntimeStream,
+  type AgentRuntimeRunInput,
+  type AgentRuntimeRunOptions,
+} from "@/app/hooks/useAgentRuntimeStream";
 import { useQueryState } from "nuqs";
 import { useStreamEventLayer } from "@/app/hooks/useStreamEventLayer";
 import {
@@ -1687,6 +1691,67 @@ export function useChat({
     experimental_thread: threadSnapshot,
   });
 
+  const submitSendMessageRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      options: AgentRuntimeRunOptions<StateType>
+    ) => stream.submitRun(input, options, { intent: "send_message" }),
+    [stream]
+  );
+
+  const submitRetryMessageRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      options: AgentRuntimeRunOptions<StateType>
+    ) => stream.submitRun(input, options, { intent: "retry_message" }),
+    [stream]
+  );
+
+  const submitSingleStepRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      options: AgentRuntimeRunOptions<StateType>
+    ) => stream.submitRun(input, options, { intent: "single_step" }),
+    [stream]
+  );
+
+  const submitRerunSubagentStepRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      options: AgentRuntimeRunOptions<StateType>
+    ) => stream.submitRun(input, options, { intent: "rerun_subagent_step" }),
+    [stream]
+  );
+
+  const submitContinueRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      options: AgentRuntimeRunOptions<StateType>
+    ) => stream.submitRun(input, options, { intent: "continue_run" }),
+    [stream]
+  );
+
+  const submitResolveThreadRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      options: AgentRuntimeRunOptions<StateType>
+    ) => stream.submitRun(input, options, { intent: "resolve_thread" }),
+    [stream]
+  );
+
+  const submitResumeInterruptRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      options: AgentRuntimeRunOptions<StateType>
+    ) => stream.submitRun(input, options, { intent: "resume_interrupt" }),
+    [stream]
+  );
+
+  const stopCurrentRun = useCallback(
+    () => stream.stopRun({ intent: "stop_run" }),
+    [stream]
+  );
+
   const shouldPollThreadSnapshot =
     Boolean(threadId) &&
     (stream.isLoading ||
@@ -1889,7 +1954,7 @@ export function useChat({
       if (newThreadId && pendingNewThreadTitle) {
         pendingNewThreadTitleThreadIdRef.current = newThreadId;
       }
-      stream.submitRun(
+      submitSendMessageRun(
         {
           messages: [newMessage],
           ...(seededGoal ? { goal: seededGoal } : {}),
@@ -1908,8 +1973,7 @@ export function useChat({
           }),
           config: buildRunConfig(),
           ...(seededGoal ? { durability: "async" as const } : {}),
-        }),
-        { intent: "send_message" }
+        })
       );
       // Update thread list immediately when sending a message
       onHistoryRevalidate?.();
@@ -1918,6 +1982,7 @@ export function useChat({
       stream,
       clearStreamEvents,
       markRunStarting,
+      submitSendMessageRun,
       withStreamSubmitOptions,
       buildRunConfig,
       onHistoryRevalidate,
@@ -1950,7 +2015,7 @@ export function useChat({
       const checkpointOptions = hasUsableCheckpoint(options.checkpoint)
         ? { checkpoint: { ...options.checkpoint } }
         : invalidImplicitCheckpointOptions;
-      stream.submitRun(
+      submitRetryMessageRun(
         { messages: [newMessage] },
         withStreamSubmitOptions({
           metadata: workspaceMetadata,
@@ -1962,15 +2027,14 @@ export function useChat({
             ],
           }),
           config: buildRunConfig(),
-        }),
-        { intent: "retry_message" }
+        })
       );
       onHistoryRevalidate?.();
     },
     [
-      stream,
       clearStreamEvents,
       markRunStarting,
+      submitRetryMessageRun,
       withStreamSubmitOptions,
       workspaceMetadata,
       invalidImplicitCheckpointOptions,
@@ -1989,7 +2053,11 @@ export function useChat({
       clearStreamEvents();
       markRunStarting();
       if (hasUsableCheckpoint(checkpoint)) {
-        stream.submitRun(
+        const submitStepRun = isRerunningSubagent
+          ? submitRerunSubagentStepRun
+          : submitSingleStepRun;
+
+        submitStepRun(
           undefined,
           withStreamSubmitOptions({
             ...(optimisticMessages
@@ -2000,29 +2068,24 @@ export function useChat({
               ? { interruptAfter: ["tools"] }
               : { interruptBefore: ["tools"] }),
             config: buildRunConfig(),
-          }),
-          {
-            intent: isRerunningSubagent
-              ? "rerun_subagent_step"
-              : "single_step",
-          }
+          })
         );
       } else {
-        stream.submitRun(
+        submitSingleStepRun(
           { messages },
           withStreamSubmitOptions({
             ...invalidImplicitCheckpointOptions,
             config: buildRunConfig(),
             interruptBefore: ["tools"],
-          }),
-          { intent: "single_step" }
+          })
         );
       }
     },
     [
-      stream,
       clearStreamEvents,
       markRunStarting,
+      submitRerunSubagentStepRun,
+      submitSingleStepRun,
       withStreamSubmitOptions,
       buildRunConfig,
       invalidImplicitCheckpointOptions,
@@ -2234,7 +2297,7 @@ export function useChat({
     (hasTaskToolCall?: boolean) => {
       clearStreamEvents();
       markRunStarting();
-      stream.submitRun(
+      submitContinueRun(
         undefined,
         withStreamSubmitOptions({
           ...invalidImplicitCheckpointOptions,
@@ -2242,16 +2305,15 @@ export function useChat({
           ...(hasTaskToolCall
             ? { interruptAfter: ["tools"] }
             : { interruptBefore: ["tools"] }),
-        }),
-        { intent: "continue_run" }
+        })
       );
       // Update thread list when continuing stream
       onHistoryRevalidate?.();
     },
     [
-      stream,
       clearStreamEvents,
       markRunStarting,
+      submitContinueRun,
       withStreamSubmitOptions,
       buildRunConfig,
       onHistoryRevalidate,
@@ -2260,18 +2322,17 @@ export function useChat({
   );
 
   const markCurrentThreadAsResolved = useCallback(() => {
-    stream.submitRun(
+    submitResolveThreadRun(
       null,
       withStreamSubmitOptions({
         ...invalidImplicitCheckpointOptions,
         command: { goto: "__end__", update: null },
-      }),
-      { intent: "resolve_thread" }
+      })
     );
     // Update thread list when marking thread as resolved
     onHistoryRevalidate?.();
   }, [
-    stream,
+    submitResolveThreadRun,
     withStreamSubmitOptions,
     invalidImplicitCheckpointOptions,
     onHistoryRevalidate,
@@ -2281,22 +2342,21 @@ export function useChat({
     (value: any) => {
       clearStreamEvents();
       markRunStarting();
-      stream.submitRun(
+      submitResumeInterruptRun(
         null,
         withStreamSubmitOptions({
           ...invalidImplicitCheckpointOptions,
           command: { resume: value },
           config: buildRunConfig(),
-        }),
-        { intent: "resume_interrupt" }
+        })
       );
       // Update thread list when resuming from interrupt
       onHistoryRevalidate?.();
     },
     [
-      stream,
       clearStreamEvents,
       markRunStarting,
+      submitResumeInterruptRun,
       withStreamSubmitOptions,
       buildRunConfig,
       onHistoryRevalidate,
@@ -2312,8 +2372,8 @@ export function useChat({
       status: "stopped",
       updatedAt: Date.now(),
     }));
-    stream.stopRun({ intent: "stop_run" });
-  }, [stream]);
+    stopCurrentRun();
+  }, [stopCurrentRun]);
 
   const isRunLoading =
     snapshotHasActiveRun || (stream.isLoading && localRunInFlight);

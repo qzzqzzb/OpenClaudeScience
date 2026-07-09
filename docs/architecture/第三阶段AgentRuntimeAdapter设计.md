@@ -146,6 +146,7 @@ getStreamClient as the only temporary LangGraph stream client escape hatch
 AgentRuntimeStreamMode neutral stream mode type
 submitRun / stopRun transition methods with intent descriptors
 AgentRuntime run intent contracts in ui/src/lib/agent-runtime-runs.ts
+intent-specific run helpers in useChat.ts
 ```
 
 暂不迁移：
@@ -207,6 +208,7 @@ OpenCode / mock runtime provider
 - 主 run 控制已新增 `submitRun()` / `stopRun()` 过渡入口，当前仍原样透传 LangGraph `stream.submit()` / `stream.stop()`。
 - `submitRun()` / `stopRun()` 已支持 intent descriptor，用于标记发送、重试、单步、继续、恢复中断、停止等业务意图；descriptor 当前不参与 payload 拼装。
 - run intent 类型已从 React hook 文件抽到 `ui/src/lib/agent-runtime-runs.ts`，后续 mock/OpenCode adapter 可以引用这份中立 contract。
+- `useChat.ts` 已新增 intent-specific helper，把发送、重试、单步、继续、结束、恢复中断、停止这些 run 控制入口从 UI 回调中收口出来；helper 当前仍原样透传既有 input/options。
 
 ### 3.3 迁移 run 操作
 
