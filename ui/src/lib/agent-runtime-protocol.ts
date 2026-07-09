@@ -1,4 +1,4 @@
-import type { AgentRuntimeControlIntent } from "@/lib/agent-runtime-runs";
+import type { AgentRuntimeControlIntent } from "./agent-runtime-runs";
 
 export type AgentRuntimeProviderKind = "langgraph" | "mock" | "opencode";
 

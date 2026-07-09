@@ -168,3 +168,40 @@ AgentRuntimeProtocol 是否足够表达当前 LangGraph 行为
 UI 是否还有隐藏 LangGraph 依赖
 OpenCode 是否能映射到同一协议
 ```
+
+## MockRuntimeProvider 骨架
+
+当前新增：
+
+```text
+ui/src/lib/mock-agent-runtime.ts
+ui/tests/mock-agent-runtime.test.mts
+```
+
+它不是新的真实 Agent，也不是新的后端 runtime。它的作用是用纯前端 TypeScript 生成标准事件，验证协议是否足够表达 Agent 运行过程。
+
+支持的最小场景：
+
+| 场景 | 用途 |
+| --- | --- |
+| `success` | 验证普通 assistant 文本流 |
+| `tool_call` | 验证工具调用和工具结果事件 |
+| `interrupt` | 验证人工审批 / 输入中断事件 |
+| `error` | 验证错误和失败结束事件 |
+
+当前边界：
+
+```text
+MockRuntimeProvider
+  -> AgentRuntimeRunEvent[]
+  -> 测试验证
+```
+
+还没有进入：
+
+```text
+Chat UI
+useChat.ts
+useAgentRuntimeStream()
+LangGraphAgentRuntimeAdapter
+```
