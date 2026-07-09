@@ -274,3 +274,49 @@ submit / join / cancel 控制层
 stream mapper：message_delta / tool_call / tool_result / interrupt / state
 provider adapter：LangGraph / Mock / OpenCode 的具体协议适配
 ```
+
+## Runtime Provider 接口
+
+当前新增：
+
+```text
+ui/src/lib/agent-runtime-provider.ts
+ui/tests/agent-runtime-provider.test.mts
+```
+
+这是第四阶段后续替换 runtime 的最小抽象，不等同于当前主链路里的 `ClientAgentRuntimeAdapter`。
+
+最小形状：
+
+```ts
+interface AgentRuntimeProtocolProvider {
+  readonly provider: "langgraph" | "mock" | "opencode";
+  healthCheck?(): Promise<AgentRuntimeProviderHealth>;
+  run(input: AgentRuntimeRunInput, options?: AgentRuntimeProviderRunOptions): AsyncIterable<AgentRuntimeRunEvent>;
+  cancelRun?(input: AgentRuntimeCancelRunInput): Promise<void>;
+}
+```
+
+设计含义：
+
+```text
+UI / service 不应该知道底层是 LangGraph、DeepAgents、OpenCode 还是 Mock。
+UI / service 只消费 AgentRuntimeRunEvent。
+具体 provider 自己负责把底层 raw 协议转换成 AgentRuntimeRunEvent。
+```
+
+当前状态：
+
+```text
+MockRuntimeProvider
+  implements AgentRuntimeProtocolProvider<MockRuntimeRunOptions>
+```
+
+后续真实 LangGraph provider 应组合：
+
+```text
+AgentRuntime lifecycle helper
+  + LangGraph stream event mapper
+  + LangGraph SDK run/stream/join/cancel
+  -> AgentRuntimeProtocolProvider
+```

@@ -4,6 +4,10 @@ import type {
   AgentRuntimeRunEvent,
   AgentRuntimeRunInput,
 } from "./agent-runtime-protocol";
+import type {
+  AgentRuntimeProviderRunOptions,
+  AgentRuntimeProtocolProvider,
+} from "./agent-runtime-provider";
 
 export type MockRuntimeScenario =
   | "success"
@@ -18,12 +22,11 @@ export interface MockRuntimeProviderOptions {
   now?: () => Date;
 }
 
-export interface MockRuntimeRunOptions {
+export interface MockRuntimeRunOptions extends AgentRuntimeProviderRunOptions {
   scenario?: MockRuntimeScenario;
   responseText?: string;
   chunkSize?: number;
   delayMs?: number;
-  signal?: AbortSignal;
   runId?: string;
   messageId?: string;
   toolCallId?: string;
@@ -262,7 +265,9 @@ export async function collectMockRuntimeEvents(
   return events;
 }
 
-export class MockRuntimeProvider {
+export class MockRuntimeProvider
+  implements AgentRuntimeProtocolProvider<MockRuntimeRunOptions>
+{
   readonly provider: AgentRuntimeProviderKind = "mock";
   private readonly createRunId?: () => string;
   private readonly createMessageId?: () => string;
@@ -274,6 +279,15 @@ export class MockRuntimeProvider {
     this.createMessageId = options.createMessageId;
     this.createToolCallId = options.createToolCallId;
     this.now = options.now;
+  }
+
+  async healthCheck() {
+    return {
+      provider: this.provider,
+      ok: true,
+      status: "ready" as const,
+      message: "Mock runtime provider is available.",
+    };
   }
 
   run(
