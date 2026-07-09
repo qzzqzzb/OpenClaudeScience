@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import re
 import shlex
+import locale
+import os
+import subprocess
 import uuid
 from pathlib import Path
 from typing import Any
@@ -11,6 +14,7 @@ from typing import Any
 from deepagents.backends import LocalShellBackend
 from deepagents.backends.protocol import (
     EditResult,
+    ExecuteResponse,
     FileDownloadResponse,
     FileUploadResponse,
     ReadResult,
@@ -40,6 +44,15 @@ HOST_ROOTS = {
     "usr",
     "var",
 }
+HEAVY_INTERACTIVE_PACKAGES = {
+    "fenics",
+    "gmsh",
+    "openbabel",
+    "openfoam",
+    "psi4",
+    "pyscf",
+    "xtb-python",
+}
 
 
 def _canonical_skill_uri(file_path: str) -> str:
@@ -47,6 +60,54 @@ def _canonical_skill_uri(file_path: str) -> str:
     if file_path.startswith(VALIDATED_SKILL_URI_PREFIX):
         return f"{SKILL_URI_PREFIX}{file_path[len(VALIDATED_SKILL_URI_PREFIX):]}"
     return file_path
+
+
+def _blocked_interactive_install(command: str) -> str | None:
+    """Block known heavyweight package installs in the interactive runtime."""
+
+    lowered = command.lower()
+    install_command = re.search(
+        r"\b(?:python(?:\d+(?:\.\d+)?)?(?:\.exe)?\s+-m\s+pip|"
+        r"pip(?:\d+(?:\.\d+)?)?(?:\.exe)?|conda|mamba)\s+install\b",
+        lowered,
+    )
+    if not install_command:
+        return None
+
+    requested = sorted(
+        package
+        for package in HEAVY_INTERACTIVE_PACKAGES
+        if re.search(rf"(?<![\w.-]){re.escape(package)}(?![\w.-])", lowered)
+    )
+    if not requested:
+        return None
+
+    names = ", ".join(requested)
+    return (
+        f"Installation of heavyweight scientific package(s) is blocked in the "
+        f"interactive runtime: {names}. Use already installed lightweight "
+        "libraries or produce a reproducible script/report instead. If the real "
+        "solver is required, explain the dependency and ask the user to approve "
+        "a separate environment setup step."
+    )
+
+
+def _decode_process_output(data: bytes) -> str:
+    if not data:
+        return ""
+
+    encodings = ["utf-8", locale.getpreferredencoding(False), "mbcs", "gbk", "cp936"]
+    seen: set[str] = set()
+    for encoding in encodings:
+        normalized = encoding.lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        try:
+            return data.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            continue
+    return data.decode("utf-8", errors="replace")
 
 
 class DynamicLocalShellBackend(SandboxBackendProtocol):
@@ -492,8 +553,100 @@ class DynamicLocalShellBackend(SandboxBackendProtocol):
         return "".join(translated)
 
     def execute(self, command: str, *, timeout: int | None = None):
+        blocked = _blocked_interactive_install(command)
+        if blocked:
+            return ExecuteResponse(output=f"Error: {blocked}", exit_code=1)
         translated = self._translate_logical_paths_in_command(command)
-        return self._backend().execute(translated, timeout=timeout)
+        return self._execute_with_tolerant_decoding(translated, timeout=timeout)
+
+    def _execute_with_tolerant_decoding(
+        self,
+        command: str,
+        *,
+        timeout: int | None = None,
+    ) -> ExecuteResponse:
+        if not command or not isinstance(command, str):
+            return ExecuteResponse(
+                output="Error: Command must be a non-empty string.",
+                exit_code=1,
+                truncated=False,
+            )
+
+        resource = self._resource()
+        effective_timeout = (
+            timeout
+            if timeout is not None
+            else resource.timeout
+            if resource is not None
+            else self.timeout
+        )
+        if effective_timeout <= 0:
+            return ExecuteResponse(
+                output=f"Error: timeout must be positive, got {effective_timeout}.",
+                exit_code=1,
+                truncated=False,
+            )
+
+        env = os.environ.copy() if self.inherit_env else {}
+        env.setdefault("PYTHONUTF8", "1")
+        env.setdefault("PYTHONIOENCODING", "utf-8")
+
+        try:
+            result = subprocess.run(  # noqa: S602
+                command,
+                check=False,
+                shell=True,
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                text=False,
+                timeout=effective_timeout,
+                env=env,
+                cwd=str(self._workspace_root()),
+            )
+        except subprocess.TimeoutExpired:
+            if timeout is not None:
+                message = (
+                    f"Error: Command timed out after {effective_timeout} seconds "
+                    "(custom timeout). The command may be stuck or require more time."
+                )
+            else:
+                message = (
+                    f"Error: Command timed out after {effective_timeout} seconds. "
+                    "For long-running commands, re-run using the timeout parameter."
+                )
+            return ExecuteResponse(output=message, exit_code=124, truncated=False)
+        except Exception as exc:  # noqa: BLE001
+            return ExecuteResponse(
+                output=f"Error executing command ({type(exc).__name__}): {exc}",
+                exit_code=1,
+                truncated=False,
+            )
+
+        output_parts: list[str] = []
+        stdout = _decode_process_output(result.stdout)
+        stderr = _decode_process_output(result.stderr)
+        if stdout:
+            output_parts.append(stdout)
+        if stderr:
+            stderr_lines = stderr.strip().split("\n")
+            output_parts.extend(f"[stderr] {line}" for line in stderr_lines)
+
+        output = "\n".join(output_parts) if output_parts else "<no output>"
+
+        truncated = False
+        if len(output) > self.max_output_bytes:
+            output = output[: self.max_output_bytes]
+            output += f"\n\n... Output truncated at {self.max_output_bytes} bytes."
+            truncated = True
+
+        if result.returncode != 0:
+            output = f"{output.rstrip()}\n\nExit code: {result.returncode}"
+
+        return ExecuteResponse(
+            output=output,
+            exit_code=result.returncode,
+            truncated=truncated,
+        )
 
 
 def workspace_override_from_runtime(runtime: Any) -> str | None:

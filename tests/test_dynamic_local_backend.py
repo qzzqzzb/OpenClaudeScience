@@ -11,7 +11,10 @@ if BUNDLED_DEEPAGENTS.exists():
 from langchain.tools import ToolRuntime
 
 from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemState
-from internagents.dynamic_local_backend import DynamicLocalShellBackend
+from internagents.dynamic_local_backend import (
+    DynamicLocalShellBackend,
+    _decode_process_output,
+)
 
 
 class DynamicLocalShellBackendTest(unittest.TestCase):
@@ -106,6 +109,22 @@ class DynamicLocalShellBackendTest(unittest.TestCase):
 
         self.assertEqual(result.status, "success")
         self.assertIn("name: docx", result.content)
+
+    def test_decodes_gbk_process_output(self) -> None:
+        self.assertEqual(_decode_process_output("测试".encode("gbk")), "测试")
+
+    def test_execute_tolerates_non_utf8_process_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            backend = self._backend(Path(tmp))
+            command = (
+                f'"{sys.executable}" -c "import sys; '
+                "sys.stdout.buffer.write('测试'.encode('gbk'))\""
+            )
+
+            result = backend.execute(command)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("测试", result.output)
 
 
 if __name__ == "__main__":

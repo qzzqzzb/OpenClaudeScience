@@ -104,6 +104,7 @@ from internagents.remote_compute_tools import (
     remote_compute_tools,
 )
 from internagents.thread_skill_middleware import ThreadSkillMiddleware
+from internagents.tool_path_middleware import ToolPathNormalizationMiddleware
 from internagents.ssh_backend import SshShellBackend
 from internagents.web_search_tools import (
     WebSearchBudgetMiddleware,
@@ -741,6 +742,15 @@ def _agent_system_prompt(base_prompt: str, agent_config: dict[str, Any]) -> str:
         f"use the `{REMOTE_COMPUTE_SUBMIT_TOOL}` tool. Keep the command "
         "self-contained, create harvestable files under `out/` when useful, and "
         "explain that the user must approve the remote job card before it runs."
+        "\n\nPackage installation policy: do not install new Python, Node, system, "
+        "or solver packages during ordinary interactive analysis unless the user "
+        "explicitly asks for installation. First check and use already available "
+        "packages. For computational chemistry, CAD/CAE, CFD/FEM, or other heavy "
+        "scientific workflows, avoid installing heavyweight solvers such as PySCF, "
+        "Psi4, xTB, OpenBabel, FEniCS, OpenFOAM, or Gmsh inside the chat runtime. "
+        "Use installed lightweight libraries, pure-Python approximations, or write "
+        "a reproducible script/report; if a real solver is required, explain the "
+        "dependency and ask the user before attempting installation."
     )
     return goal_system_prompt(base_prompt)
 
@@ -1543,6 +1553,9 @@ def create_agent_for_resource(resource: ResourceConfig):  # noqa: ANN201
     middleware.append(WebSearchBudgetMiddleware())
     middleware.append(RuntimeDateContextMiddleware())
     middleware.append(GoalContextMiddleware())
+    middleware.append(
+        ToolPathNormalizationMiddleware(resource_id=resource.id, fallback_root=ROOT_DIR)
+    )
     middleware.append(_thread_skill_middleware(agent_config, backend))
     return create_deep_agent(
         model=_create_agent_model(),
@@ -1564,8 +1577,12 @@ def create_runtime_agent():  # noqa: ANN201
     runtime_id = _env_value("INTERNAGENT_RUNTIME_ID") or "runtime"
     runtime_resource = None
     try:
-        _, resources = load_resource_config()
+        default_resource_id, resources = load_resource_config()
         runtime_resource = resources.get(runtime_id)
+        if runtime_resource is None:
+            default_resource = resources.get(default_resource_id)
+            if default_resource is not None and default_resource.backend == "local_shell":
+                runtime_resource = default_resource
     except Exception:
         runtime_resource = None
     resolved_skills = _resolve_skills(agent_config)
@@ -1610,6 +1627,12 @@ def create_runtime_agent():  # noqa: ANN201
                 else "KB sync is not configured for this runtime."
             )
         )
+    else:
+        system_prompt += (
+            "\nWorkspace logical root: /\n"
+            f"{_logical_path_prompt()}\n"
+            "KB sync is not configured for this runtime."
+        )
     middleware = list(agent_config.get("middleware") or [])
     if runtime_resource is not None and runtime_resource.kb_path:
         middleware.append(KbSyncMiddleware(resource=runtime_resource, backend=backend))
@@ -1617,6 +1640,12 @@ def create_runtime_agent():  # noqa: ANN201
     middleware.append(WebSearchBudgetMiddleware())
     middleware.append(RuntimeDateContextMiddleware())
     middleware.append(GoalContextMiddleware())
+    middleware.append(
+        ToolPathNormalizationMiddleware(
+            resource_id=runtime_resource.id if runtime_resource is not None else runtime_id,
+            fallback_root=ROOT_DIR,
+        )
+    )
     middleware.append(_thread_skill_middleware(agent_config, backend))
     return create_deep_agent(
         model=_create_agent_model(),
