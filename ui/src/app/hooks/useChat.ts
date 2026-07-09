@@ -24,11 +24,7 @@ import type {
 } from "@/lib/agent-runtime-events";
 import type { ClientAgentRuntimeAdapter } from "@/lib/agent-runtime";
 import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
-import {
-  useAgentRuntimeStream,
-  type AgentRuntimeRunInput,
-  type AgentRuntimeRunOptions,
-} from "@/app/hooks/useAgentRuntimeStream";
+import { useAgentRuntimeStream } from "@/app/hooks/useAgentRuntimeStream";
 import { useQueryState } from "nuqs";
 import { useStreamEventLayer } from "@/app/hooks/useStreamEventLayer";
 import {
@@ -1691,66 +1687,16 @@ export function useChat({
     experimental_thread: threadSnapshot,
   });
 
-  const submitSendMessageRun = useCallback(
-    (
-      input: AgentRuntimeRunInput<StateType>,
-      options: AgentRuntimeRunOptions<StateType>
-    ) => stream.submitRun(input, options, { intent: "send_message" }),
-    [stream]
-  );
-
-  const submitRetryMessageRun = useCallback(
-    (
-      input: AgentRuntimeRunInput<StateType>,
-      options: AgentRuntimeRunOptions<StateType>
-    ) => stream.submitRun(input, options, { intent: "retry_message" }),
-    [stream]
-  );
-
-  const submitSingleStepRun = useCallback(
-    (
-      input: AgentRuntimeRunInput<StateType>,
-      options: AgentRuntimeRunOptions<StateType>
-    ) => stream.submitRun(input, options, { intent: "single_step" }),
-    [stream]
-  );
-
-  const submitRerunSubagentStepRun = useCallback(
-    (
-      input: AgentRuntimeRunInput<StateType>,
-      options: AgentRuntimeRunOptions<StateType>
-    ) => stream.submitRun(input, options, { intent: "rerun_subagent_step" }),
-    [stream]
-  );
-
-  const submitContinueRun = useCallback(
-    (
-      input: AgentRuntimeRunInput<StateType>,
-      options: AgentRuntimeRunOptions<StateType>
-    ) => stream.submitRun(input, options, { intent: "continue_run" }),
-    [stream]
-  );
-
-  const submitResolveThreadRun = useCallback(
-    (
-      input: AgentRuntimeRunInput<StateType>,
-      options: AgentRuntimeRunOptions<StateType>
-    ) => stream.submitRun(input, options, { intent: "resolve_thread" }),
-    [stream]
-  );
-
-  const submitResumeInterruptRun = useCallback(
-    (
-      input: AgentRuntimeRunInput<StateType>,
-      options: AgentRuntimeRunOptions<StateType>
-    ) => stream.submitRun(input, options, { intent: "resume_interrupt" }),
-    [stream]
-  );
-
-  const stopCurrentRun = useCallback(
-    () => stream.stopRun({ intent: "stop_run" }),
-    [stream]
-  );
+  const {
+    submitSendMessageRun,
+    submitRetryMessageRun,
+    submitSingleStepRun,
+    submitRerunSubagentStepRun,
+    submitContinueRun,
+    submitResolveThreadRun,
+    submitResumeInterruptRun,
+    stopCurrentRun,
+  } = stream;
 
   const shouldPollThreadSnapshot =
     Boolean(threadId) &&

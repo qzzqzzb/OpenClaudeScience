@@ -9,6 +9,7 @@ import {
 import type { ClientAgentRuntimeAdapter } from "@/lib/agent-runtime";
 import type {
   AgentRuntimeRunDescriptor,
+  AgentRuntimeRunIntent,
   AgentRuntimeStopDescriptor,
 } from "@/lib/agent-runtime-runs";
 
@@ -43,6 +44,35 @@ export interface AgentRuntimeStream<
     descriptor?: AgentRuntimeRunDescriptor
   ): Promise<void>;
   stopRun(descriptor?: AgentRuntimeStopDescriptor): Promise<void>;
+  submitSendMessageRun(
+    input: AgentRuntimeRunInput<StateType>,
+    options: AgentRuntimeRunOptions<StateType>
+  ): Promise<void>;
+  submitRetryMessageRun(
+    input: AgentRuntimeRunInput<StateType>,
+    options: AgentRuntimeRunOptions<StateType>
+  ): Promise<void>;
+  submitSingleStepRun(
+    input: AgentRuntimeRunInput<StateType>,
+    options: AgentRuntimeRunOptions<StateType>
+  ): Promise<void>;
+  submitRerunSubagentStepRun(
+    input: AgentRuntimeRunInput<StateType>,
+    options: AgentRuntimeRunOptions<StateType>
+  ): Promise<void>;
+  submitContinueRun(
+    input: AgentRuntimeRunInput<StateType>,
+    options: AgentRuntimeRunOptions<StateType>
+  ): Promise<void>;
+  submitResolveThreadRun(
+    input: AgentRuntimeRunInput<StateType>,
+    options: AgentRuntimeRunOptions<StateType>
+  ): Promise<void>;
+  submitResumeInterruptRun(
+    input: AgentRuntimeRunInput<StateType>,
+    options: AgentRuntimeRunOptions<StateType>
+  ): Promise<void>;
+  stopCurrentRun(): Promise<void>;
 }
 
 export function useAgentRuntimeStream<
@@ -70,12 +100,102 @@ export function useAgentRuntimeStream<
     [stream]
   );
 
+  const submitRunWithIntent = useCallback(
+    (
+      intent: AgentRuntimeRunIntent,
+      input: AgentRuntimeRunInput<StateType>,
+      runOptions: AgentRuntimeRunOptions<StateType>
+    ) => submitRun(input, runOptions, { intent }),
+    [submitRun]
+  );
+
+  const submitSendMessageRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      runOptions: AgentRuntimeRunOptions<StateType>
+    ) => submitRunWithIntent("send_message", input, runOptions),
+    [submitRunWithIntent]
+  );
+
+  const submitRetryMessageRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      runOptions: AgentRuntimeRunOptions<StateType>
+    ) => submitRunWithIntent("retry_message", input, runOptions),
+    [submitRunWithIntent]
+  );
+
+  const submitSingleStepRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      runOptions: AgentRuntimeRunOptions<StateType>
+    ) => submitRunWithIntent("single_step", input, runOptions),
+    [submitRunWithIntent]
+  );
+
+  const submitRerunSubagentStepRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      runOptions: AgentRuntimeRunOptions<StateType>
+    ) => submitRunWithIntent("rerun_subagent_step", input, runOptions),
+    [submitRunWithIntent]
+  );
+
+  const submitContinueRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      runOptions: AgentRuntimeRunOptions<StateType>
+    ) => submitRunWithIntent("continue_run", input, runOptions),
+    [submitRunWithIntent]
+  );
+
+  const submitResolveThreadRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      runOptions: AgentRuntimeRunOptions<StateType>
+    ) => submitRunWithIntent("resolve_thread", input, runOptions),
+    [submitRunWithIntent]
+  );
+
+  const submitResumeInterruptRun = useCallback(
+    (
+      input: AgentRuntimeRunInput<StateType>,
+      runOptions: AgentRuntimeRunOptions<StateType>
+    ) => submitRunWithIntent("resume_interrupt", input, runOptions),
+    [submitRunWithIntent]
+  );
+
+  const stopCurrentRun = useCallback(
+    () => stopRun({ intent: "stop_run" }),
+    [stopRun]
+  );
+
   return useMemo(
     () => ({
       ...stream,
       submitRun,
       stopRun,
+      submitSendMessageRun,
+      submitRetryMessageRun,
+      submitSingleStepRun,
+      submitRerunSubagentStepRun,
+      submitContinueRun,
+      submitResolveThreadRun,
+      submitResumeInterruptRun,
+      stopCurrentRun,
     }),
-    [stream, stopRun, submitRun]
+    [
+      stream,
+      stopRun,
+      stopCurrentRun,
+      submitContinueRun,
+      submitResolveThreadRun,
+      submitResumeInterruptRun,
+      submitRetryMessageRun,
+      submitRerunSubagentStepRun,
+      submitRun,
+      submitSendMessageRun,
+      submitSingleStepRun,
+    ]
   );
 }
