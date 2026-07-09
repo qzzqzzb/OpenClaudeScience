@@ -124,9 +124,9 @@ ui/src/providers/ClientProvider.tsx
 - 复用现有 LangGraph SDK 行为
 - 保持现有主流程不变
 
-## 第一阶段迁移范围
+## 第三阶段已完成范围
 
-已经开始迁移低风险调用：
+已完成迁移和收口：
 
 ```text
 useThreads()
@@ -149,22 +149,23 @@ AgentRuntime run intent contracts in ui/src/lib/agent-runtime-runs.ts
 intent-specific run helpers in useAgentRuntimeStream()
 ```
 
-暂不迁移：
+第三阶段结束后仍保留的有意边界：
 
 ```text
-runtime live stream
-interrupt resume
-run stop/retry
-runtimeClient.threads.* temporary runtime sync
-runtime event normalization
-OpenCode / mock runtime provider
+LangGraph useStream() is isolated in useAgentRuntimeStream()
+WebRemoteAgent is isolated in LangGraphAgentRuntimeAdapter
+LangGraph client.threads.* is isolated in agent-runtime.ts / project-runtime-client.ts
+LangGraph client.runs.* is isolated in project-runtime-client.ts / pending-run-input.ts
+UI still uses LangGraph data types such as Message / Assistant / Thread
+OpenCode / mock runtime provider is deferred until a concrete runtime protocol exists
 ```
 
 原因：
 
-- 这是聊天主链路。
-- 它依赖 `@langchain/langgraph-sdk/react` 的 `useStream()`。
-- 一次迁移风险太高。
+- 当前产品仍运行在 LangGraph / DeepAgents 上，第三阶段目标是边界收口，不是替换底层 runtime。
+- `useStream()` 是官方 React streaming hook，当前保留在 `useAgentRuntimeStream()` 这个唯一 facade 内。
+- `ProjectRuntimeClient` 负责 `runtimeUrl` 对应的远端运行时同步，和主 `AgentRuntimeAdapter` 是两个不同边界。
+- OpenCode / mock runtime 需要先定义 run/event/file/workspace 协议，不能在没有协议的情况下硬接。
 
 ## 后续顺序
 
@@ -212,20 +213,31 @@ OpenCode / mock runtime provider
 
 ### 3.3 迁移 run 操作
 
-下一步目标：
+已完成：
 
 - `submit`
 - `stop`
 - `retry`
 - `resumeInterrupt`
-- `joinStream`
-- `liveStream`
+- `continue`
+- `resolve`
+- `singleStep`
+- `rerunSubagentStep`
 
-当前已完成入口外壳：
+当前 run 入口：
 
 ```text
 useAgentRuntimeStream()
   -> LangGraph useStream()
+  -> submitRun() / stopRun()
+  -> submitSendMessageRun()
+  -> submitRetryMessageRun()
+  -> submitSingleStepRun()
+  -> submitRerunSubagentStepRun()
+  -> submitContinueRun()
+  -> submitResolveThreadRun()
+  -> submitResumeInterruptRun()
+  -> stopCurrentRun()
 ```
 
 当前 run intent 矩阵：
@@ -247,7 +259,7 @@ useAgentRuntimeStream()
 - 后续接 OpenCode / mock runtime 时，adapter 要实现的是这些业务语义，而不是照搬 LangGraph `submit()` 参数。
 - 当前所有 intent descriptor 仍是 metadata-only，不参与 payload 拼装。
 
-这里还需要先定义 runtime event 标准，才能真正替换内部运行时实现。
+这里已经完成第三阶段的入口收口；真正替换内部运行时实现前，还需要先定义跨 runtime event 标准。
 
 ### 3.4 定义跨 runtime event protocol
 
@@ -276,7 +288,7 @@ ui/src/server/shared/contracts/agentRuntime.contract.ts
 
 ### 3.5 接入第二 runtime provider
 
-建议先做 mock / noop provider，不要直接接 OpenCode。
+本阶段暂不接入第二 runtime provider，建议放到下一阶段先做 mock / noop provider，不要直接接 OpenCode。
 
 原因：
 
