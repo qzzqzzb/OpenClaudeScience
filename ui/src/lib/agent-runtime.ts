@@ -8,6 +8,10 @@ import {
 } from "@langchain/langgraph-sdk";
 import { WebRemoteAgent } from "@/lib/remote-agent";
 import type {
+  AgentRuntimeRunDescriptor,
+  AgentRuntimeStopDescriptor,
+} from "@/lib/agent-runtime-runs";
+import type {
   AgentRuntimeStreamConfig,
   AgentRuntimeStreamEvent,
 } from "@/lib/agent-runtime-events";
@@ -50,6 +54,23 @@ export interface GetAgentThreadHistoryInput {
   limit?: number;
 }
 
+export interface AgentRuntimeStreamDriver<RunInput, RunOptions> {
+  submit(input: RunInput, options?: RunOptions): Promise<void>;
+  stop(): Promise<void>;
+}
+
+export interface SubmitAgentRuntimeStreamRunInput<RunInput, RunOptions> {
+  driver: AgentRuntimeStreamDriver<RunInput, RunOptions>;
+  input: RunInput;
+  options?: RunOptions;
+  descriptor?: AgentRuntimeRunDescriptor;
+}
+
+export interface StopAgentRuntimeStreamRunInput<RunInput, RunOptions> {
+  driver: AgentRuntimeStreamDriver<RunInput, RunOptions>;
+  descriptor?: AgentRuntimeStopDescriptor;
+}
+
 export interface ClientAgentRuntimeAdapter {
   readonly provider: AgentRuntimeProvider;
   readonly deploymentUrl: string;
@@ -74,6 +95,12 @@ export interface ClientAgentRuntimeAdapter {
   getPendingRunInputPreview(
     threadId: string
   ): Promise<PendingRunInputPreview | null>;
+  submitStreamRun<RunInput, RunOptions>(
+    input: SubmitAgentRuntimeStreamRunInput<RunInput, RunOptions>
+  ): Promise<void>;
+  stopStreamRun<RunInput, RunOptions>(
+    input: StopAgentRuntimeStreamRunInput<RunInput, RunOptions>
+  ): Promise<void>;
   updateThreadMetadata(
     input: UpdateAgentThreadMetadataInput
   ): Promise<void>;
@@ -184,6 +211,20 @@ export class LangGraphAgentRuntimeAdapter
     threadId: string
   ): Promise<PendingRunInputPreview | null> {
     return loadPendingRunInputPreview(this.client, threadId);
+  }
+
+  submitStreamRun<RunInput, RunOptions>({
+    driver,
+    input,
+    options,
+  }: SubmitAgentRuntimeStreamRunInput<RunInput, RunOptions>): Promise<void> {
+    return driver.submit(input, options);
+  }
+
+  stopStreamRun<RunInput, RunOptions>({
+    driver,
+  }: StopAgentRuntimeStreamRunInput<RunInput, RunOptions>): Promise<void> {
+    return driver.stop();
   }
 
   async updateThreadMetadata({

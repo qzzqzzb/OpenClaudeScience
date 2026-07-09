@@ -90,14 +90,24 @@ export function useAgentRuntimeStream<
     (
       input: AgentRuntimeRunInput<StateType>,
       submitOptions?: AgentRuntimeRunOptions<StateType>,
-      _descriptor?: AgentRuntimeRunDescriptor
-    ) => stream.submit(input, submitOptions),
-    [stream]
+      descriptor?: AgentRuntimeRunDescriptor
+    ) =>
+      agentRuntime.submitStreamRun({
+        driver: stream,
+        input,
+        options: submitOptions,
+        descriptor,
+      }),
+    [agentRuntime, stream]
   );
 
   const stopRun = useCallback(
-    (_descriptor?: AgentRuntimeStopDescriptor) => stream.stop(),
-    [stream]
+    (descriptor?: AgentRuntimeStopDescriptor) =>
+      agentRuntime.stopStreamRun({
+        driver: stream,
+        descriptor,
+      }),
+    [agentRuntime, stream]
   );
 
   const submitRunWithIntent = useCallback(
