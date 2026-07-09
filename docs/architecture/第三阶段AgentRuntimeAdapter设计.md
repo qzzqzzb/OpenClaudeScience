@@ -138,6 +138,7 @@ useChat updateState for files/threadSkills
 useChat thread title metadata update
 useChat stream hook entry via useAgentRuntimeStream()
 useChat stream event subscription via agentRuntime.subscribe()
+AgentRuntimeStreamEvent / AgentRuntimeStreamConfig neutral type entry
 ```
 
 暂不迁移：
@@ -190,6 +191,7 @@ OpenCode / mock runtime provider
 
 - 会话列表、归档、恢复、主线程 state/history、pending run preview、线程标题和线程局部状态更新已走 runtime adapter。
 - `useChat.ts` 的 stream event layer 已从 `WebRemoteAgent` 改为依赖 `agentRuntime.subscribe()`。
+- stream event/config 类型已从 `remote-agent.ts` 抽到 `agent-runtime-events.ts`。
 - `runtimeClient.threads.*` 暂时保留，因为它属于项目 runtime 状态同步，不是主 Agent Runtime 的第一轮替换点。
 
 ### 3.3 迁移 run 操作

@@ -6,11 +6,11 @@ import {
   type Thread,
   type ThreadState,
 } from "@langchain/langgraph-sdk";
-import {
-  WebRemoteAgent,
-  type RemoteAgentStreamConfig,
-  type RemoteAgentStreamEvent,
-} from "@/lib/remote-agent";
+import { WebRemoteAgent } from "@/lib/remote-agent";
+import type {
+  AgentRuntimeStreamConfig,
+  AgentRuntimeStreamEvent,
+} from "@/lib/agent-runtime-events";
 import {
   loadPendingRunInputPreview,
   type PendingRunInputPreview,
@@ -54,9 +54,9 @@ export interface ClientAgentRuntimeAdapter {
   readonly assistantId: string;
   readonly client: Client;
   readonly legacyAgent: WebRemoteAgent;
-  subscribe(listener: (event: RemoteAgentStreamEvent) => void): () => void;
+  subscribe(listener: (event: AgentRuntimeStreamEvent) => void): () => void;
   getStreamSubmitOptions(
-    streamConfig?: RemoteAgentStreamConfig
+    streamConfig?: AgentRuntimeStreamConfig
   ): ReturnType<WebRemoteAgent["getStreamSubmitOptions"]>;
   resolveAssistant(): Promise<Assistant>;
   searchThreads(input: SearchAgentThreadsInput): Promise<Thread[]>;
@@ -104,11 +104,11 @@ export class LangGraphAgentRuntimeAdapter
     return this.legacyAgent.client;
   }
 
-  subscribe(listener: (event: RemoteAgentStreamEvent) => void): () => void {
+  subscribe(listener: (event: AgentRuntimeStreamEvent) => void): () => void {
     return this.legacyAgent.subscribe(listener);
   }
 
-  getStreamSubmitOptions(streamConfig?: RemoteAgentStreamConfig) {
+  getStreamSubmitOptions(streamConfig?: AgentRuntimeStreamConfig) {
     return this.legacyAgent.getStreamSubmitOptions(streamConfig);
   }
 

@@ -6,6 +6,10 @@ import {
   type StreamMode,
   type Thread,
 } from "@langchain/langgraph-sdk";
+import type {
+  AgentRuntimeStreamConfig,
+  AgentRuntimeStreamEvent,
+} from "@/lib/agent-runtime-events";
 
 export const TEXTUAL_COMPAT_STREAM_MODES: StreamMode[] = [
   "messages-tuple",
@@ -13,20 +17,8 @@ export const TEXTUAL_COMPAT_STREAM_MODES: StreamMode[] = [
   "values",
 ];
 
-export interface RemoteAgentStreamConfig {
-  modes?: StreamMode[];
-  subgraphs?: boolean;
-}
-
-export interface RemoteAgentStreamEvent {
-  id: string;
-  at: number;
-  threadId?: string | null;
-  rawEvent: string;
-  mode: string;
-  namespace?: string[];
-  data: unknown;
-}
+export type RemoteAgentStreamConfig = AgentRuntimeStreamConfig;
+export type RemoteAgentStreamEvent = AgentRuntimeStreamEvent;
 
 interface WebRemoteAgentOptions {
   url: string;
