@@ -1889,7 +1889,7 @@ export function useChat({
       if (newThreadId && pendingNewThreadTitle) {
         pendingNewThreadTitleThreadIdRef.current = newThreadId;
       }
-      stream.submit(
+      stream.submitRun(
         {
           messages: [newMessage],
           ...(seededGoal ? { goal: seededGoal } : {}),
@@ -1949,7 +1949,7 @@ export function useChat({
       const checkpointOptions = hasUsableCheckpoint(options.checkpoint)
         ? { checkpoint: { ...options.checkpoint } }
         : invalidImplicitCheckpointOptions;
-      stream.submit(
+      stream.submitRun(
         { messages: [newMessage] },
         withStreamSubmitOptions({
           metadata: workspaceMetadata,
@@ -1987,7 +1987,7 @@ export function useChat({
       clearStreamEvents();
       markRunStarting();
       if (hasUsableCheckpoint(checkpoint)) {
-        stream.submit(
+        stream.submitRun(
           undefined,
           withStreamSubmitOptions({
             ...(optimisticMessages
@@ -2001,7 +2001,7 @@ export function useChat({
           })
         );
       } else {
-        stream.submit(
+        stream.submitRun(
           { messages },
           withStreamSubmitOptions({
             ...invalidImplicitCheckpointOptions,
@@ -2226,7 +2226,7 @@ export function useChat({
     (hasTaskToolCall?: boolean) => {
       clearStreamEvents();
       markRunStarting();
-      stream.submit(
+      stream.submitRun(
         undefined,
         withStreamSubmitOptions({
           ...invalidImplicitCheckpointOptions,
@@ -2251,7 +2251,7 @@ export function useChat({
   );
 
   const markCurrentThreadAsResolved = useCallback(() => {
-    stream.submit(
+    stream.submitRun(
       null,
       withStreamSubmitOptions({
         ...invalidImplicitCheckpointOptions,
@@ -2271,7 +2271,7 @@ export function useChat({
     (value: any) => {
       clearStreamEvents();
       markRunStarting();
-      stream.submit(
+      stream.submitRun(
         null,
         withStreamSubmitOptions({
           ...invalidImplicitCheckpointOptions,
@@ -2301,7 +2301,7 @@ export function useChat({
       status: "stopped",
       updatedAt: Date.now(),
     }));
-    stream.stop();
+    stream.stopRun();
   }, [stream]);
 
   const isRunLoading =
