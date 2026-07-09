@@ -11,10 +11,12 @@ import type {
   AgentRuntimeStreamConfig,
   AgentRuntimeStreamEvent,
 } from "@/lib/agent-runtime-events";
+import { mapLangGraphStreamEventToRuntimeEvents } from "@/lib/langgraph-runtime-event-mapper";
 import {
   loadPendingRunInputPreview,
   type PendingRunInputPreview,
 } from "@/lib/pending-run-input";
+import type { AgentRuntimeRunEvent } from "@/lib/agent-runtime-protocol";
 
 export type AgentRuntimeProvider = "langgraph";
 
@@ -53,6 +55,9 @@ export interface ClientAgentRuntimeAdapter {
   readonly deploymentUrl: string;
   readonly assistantId: string;
   subscribe(listener: (event: AgentRuntimeStreamEvent) => void): () => void;
+  subscribeProtocolEvents(
+    listener: (event: AgentRuntimeRunEvent) => void
+  ): () => void;
   getStreamClient(): Client;
   getStreamSubmitOptions(
     streamConfig?: AgentRuntimeStreamConfig
@@ -82,6 +87,9 @@ export class LangGraphAgentRuntimeAdapter
   readonly deploymentUrl: string;
   readonly assistantId: string;
   private readonly legacyAgent: WebRemoteAgent;
+  private readonly protocolListeners = new Set<
+    (event: AgentRuntimeRunEvent) => void
+  >();
 
   constructor({
     apiKey,
@@ -97,6 +105,9 @@ export class LangGraphAgentRuntimeAdapter
       apiKey,
       headers,
     });
+    this.legacyAgent.subscribe((event) => {
+      this.publishProtocolEvents(event);
+    });
   }
 
   private get client(): Client {
@@ -109,6 +120,30 @@ export class LangGraphAgentRuntimeAdapter
 
   subscribe(listener: (event: AgentRuntimeStreamEvent) => void): () => void {
     return this.legacyAgent.subscribe(listener);
+  }
+
+  subscribeProtocolEvents(
+    listener: (event: AgentRuntimeRunEvent) => void
+  ): () => void {
+    this.protocolListeners.add(listener);
+    return () => {
+      this.protocolListeners.delete(listener);
+    };
+  }
+
+  private publishProtocolEvents(event: AgentRuntimeStreamEvent): void {
+    const protocolEvents = mapLangGraphStreamEventToRuntimeEvents(event, {
+      includeStateEvents: true,
+    });
+    if (protocolEvents.length === 0) {
+      return;
+    }
+
+    for (const protocolEvent of protocolEvents) {
+      for (const listener of this.protocolListeners) {
+        listener(protocolEvent);
+      }
+    }
   }
 
   getStreamSubmitOptions(streamConfig?: AgentRuntimeStreamConfig) {

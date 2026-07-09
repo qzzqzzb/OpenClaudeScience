@@ -2444,6 +2444,7 @@ export function useChat({
     runUpdatedAt: runLifecycle.updatedAt,
     getMessagesMetadata: stream.getMessagesMetadata,
     streamEvents: streamEventLayer.streamEvents,
+    protocolEvents: streamEventLayer.protocolEvents,
     clearStreamEvents: streamEventLayer.clearStreamEvents,
     lastUpdateNamespace: streamEventLayer.lastUpdateNamespace,
     sendMessage,

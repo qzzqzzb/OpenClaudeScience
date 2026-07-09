@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AgentRuntimeStreamEvent } from "@/lib/agent-runtime-events";
+import type {
+  AgentRuntimeInterruptEvent,
+  AgentRuntimeRunEvent,
+} from "@/lib/agent-runtime-protocol";
 
 export type StreamEventKind =
   | "message"
@@ -27,6 +31,9 @@ const MAX_STREAM_EVENTS = 100;
 
 interface RuntimeStreamEventSource {
   subscribe(listener: (event: AgentRuntimeStreamEvent) => void): () => void;
+  subscribeProtocolEvents?(
+    listener: (event: AgentRuntimeRunEvent) => void
+  ): () => void;
 }
 
 function collectInterrupts(data: unknown): unknown[] {
@@ -66,6 +73,9 @@ export function useStreamEventLayer(
   currentThreadId?: string | null
 ) {
   const [streamEvents, setStreamEvents] = useState<StreamEventRecord[]>([]);
+  const [protocolEvents, setProtocolEvents] = useState<AgentRuntimeRunEvent[]>(
+    []
+  );
 
   const appendStreamEvent = useCallback(
     (event: AgentRuntimeStreamEvent) => {
@@ -97,8 +107,17 @@ export function useStreamEventLayer(
     return runtime.subscribe(appendStreamEvent);
   }, [runtime, appendStreamEvent]);
 
+  const appendProtocolEvent = useCallback((event: AgentRuntimeRunEvent) => {
+    setProtocolEvents((prev) => [...prev, event].slice(-MAX_STREAM_EVENTS));
+  }, []);
+
+  useEffect(() => {
+    return runtime.subscribeProtocolEvents?.(appendProtocolEvent);
+  }, [runtime, appendProtocolEvent]);
+
   const clearStreamEvents = useCallback(() => {
     setStreamEvents([]);
+    setProtocolEvents([]);
   }, []);
 
   const lastUpdateNamespace = useMemo(() => {
@@ -110,14 +129,25 @@ export function useStreamEventLayer(
       .reverse()
       .flatMap((event) => collectInterrupts(event.data));
 
-    if (interrupts.length === 0) return undefined;
-    if (interrupts.length === 1) return interrupts[0];
-    return interrupts;
-  }, [streamEvents]);
+    const protocolInterrupts = [...protocolEvents]
+      .reverse()
+      .filter(
+        (event): event is AgentRuntimeInterruptEvent =>
+          event.type === "interrupt"
+      )
+      .map((event) => event.payload ?? event);
+    const combinedInterrupts = [...interrupts, ...protocolInterrupts];
+
+    if (combinedInterrupts.length === 0) return undefined;
+    if (combinedInterrupts.length === 1) return combinedInterrupts[0];
+    return combinedInterrupts;
+  }, [protocolEvents, streamEvents]);
 
   return {
     streamEvents,
+    protocolEvents,
     appendStreamEvent,
+    appendProtocolEvent,
     clearStreamEvents,
     interrupt,
     lastUpdateNamespace,
