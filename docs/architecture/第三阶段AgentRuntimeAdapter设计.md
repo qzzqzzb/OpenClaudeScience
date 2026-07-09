@@ -6,6 +6,22 @@
 
 这样后续如果底层从 DeepAgents / LangGraph 换成 OpenCode、其他 agent runtime、远程 agent 服务，前端和业务层不需要大面积重写。
 
+第三阶段还必须讲清楚当前 Agent runtime 关系：
+
+```text
+coordinator
+  -> RemoteGraph
+    -> runtime
+      -> DeepAgents
+        -> Skills / MCP / subagents
+```
+
+详细关系图见：
+
+```text
+docs/architecture/第三阶段-runtime关系图.md
+```
+
 ## 当前问题
 
 当前主链路里仍有多处直接依赖：
@@ -50,6 +66,17 @@ flowchart LR
   RuntimeAdapter --> FutureAdapter[OpenCode / Other Runtime]
   LangGraphAdapter --> WebRemoteAgent[WebRemoteAgent]
   WebRemoteAgent --> LangGraphSDK[LangGraph SDK]
+```
+
+注意：上图描述的是前端 TypeScript 侧 runtime adapter 边界。Python 后端侧当前是：
+
+```mermaid
+flowchart LR
+  Frontend[Frontend LangGraph SDK] --> Coordinator[Coordinator backend<br/>langgraph.json]
+  Coordinator --> RemoteGraph[RemoteGraph]
+  RemoteGraph --> Runtime[Runtime backend<br/>langgraph.runtime.json]
+  Runtime --> DeepAgents[create_deep_agent]
+  DeepAgents --> Capabilities[Skills / MCP / tools / subagents]
 ```
 
 ## 分层职责
@@ -147,6 +174,7 @@ AgentRuntimeStreamMode neutral stream mode type
 submitRun / stopRun transition methods with intent descriptors
 AgentRuntime run intent contracts in ui/src/lib/agent-runtime-runs.ts
 intent-specific run helpers in useAgentRuntimeStream()
+runtime relationship map for coordinator / RemoteGraph / DeepAgents / Skills / MCP / subagents
 ```
 
 第三阶段结束后仍保留的有意边界：
@@ -301,5 +329,7 @@ ui/src/server/shared/contracts/agentRuntime.contract.ts
 - 新增 concrete `LangGraphAgentRuntimeAdapter`。
 - 低风险 thread 操作不再直接依赖 `WebRemoteAgent`。
 - `useChat()` 主链路保持行为不变。
+- `useChat()` 的 run 控制入口走 `useAgentRuntimeStream()` 语义方法。
+- 文档讲清 coordinator、runtime、RemoteGraph、DeepAgents、Skills、MCP、subagents 的真实关系。
 - TypeScript / lint 通过。
 - 文档能向需求同事解释：Adapter 不是前端跑仿真，而是隔离底层 agent runtime 协议。
