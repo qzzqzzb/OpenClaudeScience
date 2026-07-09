@@ -1,6 +1,6 @@
 "use client";
 
-import type { Client, Message } from "@langchain/langgraph-sdk";
+import type { Message } from "@langchain/langgraph-sdk";
 
 type PendingRunRecord = {
   run_id?: string;
@@ -10,6 +10,12 @@ type PendingRunRecord = {
   metadata?: unknown;
   kwargs?: {
     input?: unknown;
+  };
+};
+
+type PendingRunClient = {
+  runs: {
+    list(threadId: string, options?: { limit?: number }): Promise<unknown>;
   };
 };
 
@@ -65,7 +71,7 @@ export function pendingRunValues(preview: PendingRunInputPreview) {
 }
 
 export async function loadPendingRunInputPreview(
-  client: Client,
+  client: PendingRunClient,
   threadId: string
 ): Promise<PendingRunInputPreview | null> {
   try {

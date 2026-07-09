@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Client,
   type Message,
   type Assistant,
   type Checkpoint,
@@ -32,9 +31,12 @@ import {
   THREAD_TITLE_UPDATED_AT_METADATA_KEY,
 } from "@/app/utils/threadTitle";
 import {
-  loadPendingRunInputPreview,
   type PendingRunInputPreview,
 } from "@/lib/pending-run-input";
+import {
+  createProjectRuntimeClient,
+  type ProjectRuntimeClient,
+} from "@/lib/project-runtime-client";
 import {
   findStateWithMessages,
   mergeValuesWithMessages,
@@ -173,7 +175,7 @@ function useRuntimeLiveStream({
   onEvent,
   onSettled,
 }: {
-  runtimeClient: Client<StateType> | null;
+  runtimeClient: ProjectRuntimeClient<StateType> | null;
   threadId: string | null;
   enabled: boolean;
   streamMode?: StreamMode | StreamMode[];
@@ -210,7 +212,7 @@ function useRuntimeLiveStream({
 
     const joinLatestRuntimeRun = async () => {
       try {
-        const runs = await runtimeClient.runs.list(threadId, { limit: 10 });
+        const runs = await runtimeClient.listRuns(threadId, { limit: 10 });
         if (cancelled) return;
 
         const activeRun = latestActiveRuntimeRun(runs);
@@ -224,15 +226,13 @@ function useRuntimeLiveStream({
         const lastEventId = lastEventIdsRef.current.get(runId) ?? "-1";
         controller = new AbortController();
 
-        for await (const event of runtimeClient.runs.joinStream(
+        for await (const event of runtimeClient.joinRunStream({
           threadId,
           runId,
-          {
-            signal: controller.signal,
-            lastEventId,
-            streamMode,
-          }
-        )) {
+          signal: controller.signal,
+          lastEventId,
+          streamMode,
+        })) {
           if (cancelled) return;
 
           const rawEvent = String(event.event);
@@ -301,7 +301,7 @@ function useRuntimeRunSnapshot({
   threadId,
   enabled,
 }: {
-  runtimeClient: Client<StateType> | null;
+  runtimeClient: ProjectRuntimeClient<StateType> | null;
   threadId: string | null;
   enabled: boolean;
 }): RuntimeRunSnapshot | null {
@@ -317,7 +317,7 @@ function useRuntimeRunSnapshot({
 
     const refresh = async () => {
       try {
-        const runs = await runtimeClient.runs.list(threadId, { limit: 10 });
+        const runs = await runtimeClient.listRuns(threadId, { limit: 10 });
         if (cancelled) {
           return;
         }
@@ -805,7 +805,7 @@ async function loadThreadSnapshot({
   threadId,
 }: {
   agentRuntime: ClientAgentRuntimeAdapter;
-  runtimeClient: Client<StateType> | null;
+  runtimeClient: ProjectRuntimeClient<StateType> | null;
   threadId: string;
 }): Promise<ThreadState<StateType>[]> {
   let primaryState: ThreadState<StateType> | null = null;
@@ -864,7 +864,7 @@ async function loadThreadSnapshot({
   const pendingRunPreview =
     (await agentRuntime.getPendingRunInputPreview(threadId)) ??
     (runtimeClient
-      ? await loadPendingRunInputPreview(runtimeClient, threadId)
+      ? await runtimeClient.getPendingRunInputPreview(threadId)
       : null);
   if (pendingRunPreview?.status === "error") {
     return [mergePendingRunState(threadId, primaryState, pendingRunPreview)];
@@ -890,7 +890,7 @@ async function loadThreadSnapshot({
   if (runtimeClient) {
     try {
       const runtimeState = sanitizeThreadState(
-        await runtimeClient.threads.getState<StateType>(threadId)
+        await runtimeClient.getThreadState<StateType>(threadId)
       );
       if (stateHasMessages(runtimeState)) {
         return [mergeRuntimeState(runtimeState)];
@@ -903,9 +903,7 @@ async function loadThreadSnapshot({
     }
 
     try {
-      const runtimeThread = await runtimeClient.threads.get<StateType>(
-        threadId
-      );
+      const runtimeThread = await runtimeClient.getThread<StateType>(threadId);
       const runtimeState = threadToState(threadId, runtimeThread);
       if (stateHasMessages(runtimeState)) {
         return [mergeRuntimeState(runtimeState)];
@@ -915,7 +913,7 @@ async function loadThreadSnapshot({
     }
 
     try {
-      const runtimeHistory = await runtimeClient.threads.getHistory<StateType>(
+      const runtimeHistory = await runtimeClient.getThreadHistory<StateType>(
         threadId,
         { limit: 80 }
       );
@@ -950,7 +948,7 @@ function useThreadSnapshot({
   cacheScope,
 }: {
   agentRuntime: ClientAgentRuntimeAdapter;
-  runtimeClient: Client<StateType> | null;
+  runtimeClient: ProjectRuntimeClient<StateType> | null;
   threadId: string | null;
   externalThread?: UseStreamThread<StateType>;
   cacheScope: string;
@@ -1447,10 +1445,7 @@ export function useChat({
   const runtimeClient = useMemo(
     () =>
       runtimeUrl
-        ? new Client<StateType>({
-            apiUrl: runtimeUrl,
-            defaultHeaders: { "Content-Type": "application/json" },
-          })
+        ? createProjectRuntimeClient<StateType>(runtimeUrl)
         : null,
     [runtimeUrl]
   );

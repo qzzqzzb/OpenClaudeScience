@@ -1,6 +1,6 @@
 import useSWRInfinite from "swr/infinite";
 import { useMemo } from "react";
-import { Client, type Thread } from "@langchain/langgraph-sdk";
+import type { Thread } from "@langchain/langgraph-sdk";
 import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
 import {
   inferThreadDescription,
@@ -8,6 +8,10 @@ import {
 } from "@/app/utils/threadTitle";
 import { pendingRunValues } from "@/lib/pending-run-input";
 import type { ClientAgentRuntimeAdapter } from "@/lib/agent-runtime";
+import {
+  createProjectRuntimeClient,
+  type ProjectRuntimeClient,
+} from "@/lib/project-runtime-client";
 import {
   messagesFromValues,
   resolveThreadListValues,
@@ -29,7 +33,7 @@ const DEFAULT_PAGE_SIZE = 20;
 async function resolveThreadValues(
   thread: Thread,
   agentRuntime: ClientAgentRuntimeAdapter,
-  runtimeClient: Client | null
+  runtimeClient: ProjectRuntimeClient | null
 ): Promise<unknown> {
   let pendingRunStatus: string | undefined;
 
@@ -54,14 +58,14 @@ async function resolveThreadValues(
       pendingRunStatus === "pending" || pendingRunStatus === "running",
     loadRuntimeStateValues: runtimeClient
       ? async () =>
-          (await runtimeClient.threads.getState(thread.thread_id)).values
+          (await runtimeClient.getThreadState(thread.thread_id)).values
       : undefined,
     loadRuntimeThreadValues: runtimeClient
-      ? async () => (await runtimeClient.threads.get(thread.thread_id)).values
+      ? async () => (await runtimeClient.getThread(thread.thread_id)).values
       : undefined,
     loadRuntimeHistoryValues: runtimeClient
       ? async () => {
-          const history = await runtimeClient.threads.getHistory(
+          const history = await runtimeClient.getThreadHistory(
             thread.thread_id,
             {
               limit: 80,
@@ -87,10 +91,7 @@ export function useThreads(props: {
   const runtimeClient = useMemo(
     () =>
       props.runtimeUrl
-        ? new Client({
-            apiUrl: props.runtimeUrl,
-            defaultHeaders: { "Content-Type": "application/json" },
-          })
+        ? createProjectRuntimeClient(props.runtimeUrl)
         : null,
     [props.runtimeUrl]
   );
