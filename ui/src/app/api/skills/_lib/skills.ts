@@ -22,6 +22,7 @@ const LEGACY_IMPORTED_SKILLS_PATH = ".internagents/imported-skills";
 const IMPORT_TMP_PATH = ".internagents/tmp";
 const CLOUD_CLONE_TIMEOUT_MS = 120_000;
 const CLOUD_FETCH_TIMEOUT_MS = 30_000;
+const CLOUD_RAW_FETCH_TIMEOUT_MS = 30_000;
 const MAX_IMPORTED_SKILLS = 50;
 const DEFAULT_CATALOG_PATHS = [
   GLOBAL_SKILLS_PATH,
@@ -544,6 +545,131 @@ async function fetchWithTimeout(
   }
 }
 
+async function fetchTextWithCurlFallback(
+  url: string,
+  timeoutMs: number,
+  label: string
+): Promise<string> {
+  let fetchError: unknown;
+
+  try {
+    const response = await fetchWithTimeout(url, timeoutMs, label);
+    if (response.ok) {
+      return response.text();
+    }
+    fetchError = new Error(`HTTP ${response.status}`);
+  } catch (error) {
+    fetchError = error;
+  }
+
+  const curlCommand = process.platform === "win32" ? "curl.exe" : "curl";
+  const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+
+  try {
+    const { stdout } = await execFileAsync(
+      curlCommand,
+      [
+        "-L",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--connect-timeout",
+        String(Math.min(timeoutSeconds, 15)),
+        "--max-time",
+        String(timeoutSeconds),
+        url,
+      ],
+      {
+        timeout: timeoutMs + 5_000,
+        maxBuffer: 5 * 1024 * 1024,
+      }
+    );
+    return stdout;
+  } catch (curlError) {
+    const fetchMessage =
+      fetchError instanceof Error && fetchError.message.trim()
+        ? fetchError.message
+        : "unknown fetch error";
+    const curlMessage =
+      curlError instanceof Error && curlError.message.trim()
+        ? curlError.message
+        : "unknown curl error";
+    throw new Error(
+      `${label}失败，请检查网络或代理设置。fetch: ${fetchMessage}; curl: ${curlMessage}`,
+      { cause: curlError }
+    );
+  }
+}
+
+function githubRawSkillUrl(spec: CloudSkillSpec): string | null {
+  const githubRepo = parseGitHubRepoUrl(spec.repoUrl);
+  if (!githubRepo || !spec.branch || !spec.subPath) {
+    return null;
+  }
+
+  const skillPath = spec.subPath.endsWith("/SKILL.md")
+    ? spec.subPath
+    : `${spec.subPath.replace(/\/+$/, "")}/SKILL.md`;
+  const encodedPath = skillPath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  return `https://raw.githubusercontent.com/${githubRepo.owner}/${
+    githubRepo.repo
+  }/${encodeURIComponent(spec.branch)}/${encodedPath}`;
+}
+
+function isScienceCatalogRawCandidate(spec: CloudSkillSpec): boolean {
+  const githubRepo = parseGitHubRepoUrl(spec.repoUrl);
+  return Boolean(
+    githubRepo &&
+      githubRepo.owner.toLowerCase() === "internscience" &&
+      githubRepo.repo.toLowerCase() === "scp" &&
+      spec.branch &&
+      spec.subPath?.startsWith("skills/")
+  );
+}
+
+async function importGitHubRawSkill(
+  root: string,
+  spec: CloudSkillSpec
+): Promise<string[] | null> {
+  if (!isScienceCatalogRawCandidate(spec)) {
+    return null;
+  }
+
+  const rawUrl = githubRawSkillUrl(spec);
+  if (!rawUrl) {
+    return null;
+  }
+
+  const markdown = await fetchTextWithCurlFallback(
+    rawUrl,
+    CLOUD_RAW_FETCH_TIMEOUT_MS,
+    "GitHub SKILL.md 下载"
+  );
+  if (!markdown.trim()) {
+    throw new Error("云端 SKILL.md 内容为空。");
+  }
+
+  const importedRoot = resolveConfiguredPath(root, GLOBAL_IMPORTED_SKILLS_PATH);
+  await fs.mkdir(importedRoot, { recursive: true });
+  const preferredName =
+    path.basename(spec.subPath || "") ||
+    path.basename(path.dirname(new URL(rawUrl).pathname));
+  const destination = await nextAvailableDirectory(importedRoot, preferredName);
+
+  await fs.mkdir(destination, { recursive: true });
+  await fs.writeFile(
+    path.join(destination, "SKILL.md"),
+    normalizeSkillMarkdown(markdown),
+    "utf8"
+  );
+
+  return [toConfiguredPath(root, destination)];
+}
+
 async function cloneCloudSkill(
   root: string,
   spec: CloudSkillSpec
@@ -608,16 +734,11 @@ async function cloneCloudSkill(
 }
 
 async function importRawSkill(root: string, rawUrl: string): Promise<string[]> {
-  const response = await fetchWithTimeout(
+  const markdown = await fetchTextWithCurlFallback(
     rawUrl,
     CLOUD_FETCH_TIMEOUT_MS,
     "云端 SKILL.md 下载"
   );
-  if (!response.ok) {
-    throw new Error(`云端技能下载失败：HTTP ${response.status}`);
-  }
-
-  const markdown = await response.text();
   if (!markdown.trim()) {
     throw new Error("云端 SKILL.md 内容为空。");
   }
@@ -860,18 +981,23 @@ export async function importSkills(
     if (spec.kind === "raw") {
       imported = await importRawSkill(root, spec.rawUrl!);
     } else {
-      let cloned: { sourcePath: string; tmpDirectory: string };
-      try {
-        cloned =
-          (await downloadGitHubArchiveSkill(root, spec)) ??
-          (await cloneCloudSkill(root, spec));
-      } catch {
-        cloned = await cloneCloudSkill(root, spec);
-      }
-      try {
-        imported = await importSkillDirectories(root, cloned.sourcePath, 3);
-      } finally {
-        await fs.rm(cloned.tmpDirectory, { force: true, recursive: true });
+      const rawImported = await importGitHubRawSkill(root, spec);
+      if (rawImported) {
+        imported = rawImported;
+      } else {
+        let cloned: { sourcePath: string; tmpDirectory: string };
+        try {
+          cloned =
+            (await downloadGitHubArchiveSkill(root, spec)) ??
+            (await cloneCloudSkill(root, spec));
+        } catch {
+          cloned = await cloneCloudSkill(root, spec);
+        }
+        try {
+          imported = await importSkillDirectories(root, cloned.sourcePath, 3);
+        } finally {
+          await fs.rm(cloned.tmpDirectory, { force: true, recursive: true });
+        }
       }
     }
   } else {

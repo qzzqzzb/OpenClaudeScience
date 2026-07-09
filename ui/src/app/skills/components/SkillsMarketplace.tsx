@@ -80,7 +80,7 @@ const DEFAULT_SCIENCE_CATEGORY_ID = ALL_SCIENCE_CATEGORY_ID;
 const SCIENCE_MARKET_TAB = "science-market";
 const INSTALLED_SKILLS_TAB = "installed-skills";
 const CONNECTIONS_TAB = "connections";
-const SKILL_IMPORT_TIMEOUT_MS = 95_000;
+const SKILL_IMPORT_TIMEOUT_MS = 180_000;
 type SkillsTab =
   | typeof SCIENCE_MARKET_TAB
   | typeof INSTALLED_SKILLS_TAB
