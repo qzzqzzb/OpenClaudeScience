@@ -17,6 +17,7 @@
     "test:runtime-lifecycle": "node --test --experimental-strip-types tests/agent-runtime-lifecycle.test.mts",
     "test:runtime-event-mapper": "node --test --experimental-strip-types tests/langgraph-runtime-event-mapper.test.mts",
     "test:langgraph-protocol-provider": "node --test --experimental-strip-types tests/langgraph-protocol-runtime-provider.test.mts",
+    "test:runtime-protocol": "node --test --experimental-strip-types tests/mock-agent-runtime.test.mts tests/agent-runtime-provider.test.mts tests/agent-runtime-lifecycle.test.mts tests/langgraph-runtime-event-mapper.test.mts tests/langgraph-protocol-runtime-provider.test.mts",
     "test:compute-store": "node --test --experimental-strip-types tests/compute-store.test.mts",
     "test:ssh-adapter": "node --test --experimental-strip-types tests/ssh-cli-adapter.test.mts",
     "lint": "eslint .",
