@@ -224,6 +224,25 @@ useAgentRuntimeStream()
   -> LangGraph useStream()
 ```
 
+当前 run intent 矩阵：
+
+| intent | 当前 UI 动作 | 当前 input | 当前 options / control | 后续 adapter 语义 | 风险点 |
+| --- | --- | --- | --- | --- | --- |
+| `send_message` | 用户发送新消息 | `{ messages: [newMessage], goal?, threadSkills? }` | `metadata`、无效 implicit checkpoint、可选 `threadId`、`optimisticValues`、`config`、可选 `durability: "async"` | 启动一次新的用户消息 run | 不能丢附件 metadata、goal command、threadSkills、optimisticValues |
+| `retry_message` | 重新发送某条 human 消息 | `{ messages: [newMessage] }` | 可用 checkpoint 或无效 implicit checkpoint、`metadata`、`optimisticValues`、`config` | 基于指定历史点重新跑一次消息 | checkpoint 判断不能改，否则会导致重试点错位 |
+| `single_step` | 单步执行 / 从当前点继续到工具前 | 有 checkpoint 时为 `undefined`，无 checkpoint 时为 `{ messages }` | 有 checkpoint 时传 `checkpoint`，通常 `interruptBefore: ["tools"]`；无 checkpoint 时走无效 implicit checkpoint | 控制 run 在工具调用前停住 | `undefined` input 和 `{ messages }` 两条路径不能合并得太早 |
+| `rerun_subagent_step` | 重新执行子 agent 单步 | `undefined` | `checkpoint`、`interruptAfter: ["tools"]`、可选 optimistic messages、`config` | 从子 agent checkpoint 重新执行并在工具后停住 | `interruptAfter` 与普通单步相反，容易误改 |
+| `continue_run` | 继续当前中断/暂停的 run | `undefined` | 无效 implicit checkpoint、`config`、根据是否 task tool call 选择 `interruptAfter` 或 `interruptBefore` | 从当前线程状态继续 run | `hasTaskToolCall` 会改变中断位置 |
+| `resolve_thread` | 标记当前线程结束 | `null` | 无效 implicit checkpoint、`command: { goto: "__end__", update: null }` | 让 runtime 跳到结束节点 | 这是控制命令，不是普通消息提交 |
+| `resume_interrupt` | 用户提交 interrupt 的恢复值 | `null` | 无效 implicit checkpoint、`command: { resume: value }`、`config` | 恢复 LangGraph interrupt | `value` 是 interrupt 协议值，不能当 message 处理 |
+| `stop_run` | 用户停止当前流 | 无 | `stream.stop()` | 取消/停止当前前端 stream | 当前只停前端 stream；后续是否取消后端 run 要单独定义 |
+
+这张矩阵的作用：
+
+- 后续拆 `useChat.ts` helper 时，先按 intent 拆，不按 LangGraph 参数形状硬拆。
+- 后续接 OpenCode / mock runtime 时，adapter 要实现的是这些业务语义，而不是照搬 LangGraph `submit()` 参数。
+- 当前所有 intent descriptor 仍是 metadata-only，不参与 payload 拼装。
+
 这里还需要先定义 runtime event 标准，才能真正替换内部运行时实现。
 
 ### 3.4 定义跨 runtime event protocol
