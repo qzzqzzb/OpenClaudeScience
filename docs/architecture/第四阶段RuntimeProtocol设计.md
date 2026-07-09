@@ -241,3 +241,36 @@ done
 - 当前 tapped LangGraph SDK stream event 只有 `event/data/id`，没有稳定 run 生命周期边界。
 - `messages-tuple` chunk 不能可靠判断 assistant 消息已经完成。
 - 这三类事件后续应该从 run submit/join 生命周期或更稳定的 runtime metadata 中补齐。
+
+## Runtime 生命周期事件
+
+当前新增：
+
+```text
+ui/src/lib/agent-runtime-lifecycle.ts
+ui/tests/agent-runtime-lifecycle.test.mts
+```
+
+职责：
+
+```text
+submit / join / cancel 控制层
+  -> run_started / done / error / cancelled
+```
+
+这层不解析 LangGraph raw message chunk。它只处理 run 生命周期边界：
+
+| helper | 事件 |
+| --- | --- |
+| `createAgentRuntimeRunStartedEvent()` | `run_started` |
+| `createAgentRuntimeDoneEvent()` | `done` |
+| `createAgentRuntimeFailedEvents()` | `error` + `done:failed` |
+| `createAgentRuntimeCancelledEvents()` | `error:CANCELLED` + `done:cancelled` |
+
+这样后续接入真实 adapter 时，职责会更清楚：
+
+```text
+生命周期层：run_started / done / cancel / failed
+stream mapper：message_delta / tool_call / tool_result / interrupt / state
+provider adapter：LangGraph / Mock / OpenCode 的具体协议适配
+```

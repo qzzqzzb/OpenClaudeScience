@@ -13,6 +13,7 @@
     "test:think-tags": "node --test --experimental-strip-types tests/think-tags.test.mts",
     "test:local-folder-picker": "node --test --experimental-strip-types tests/local-folder-picker.test.mts",
     "test:mock-runtime": "node --test --experimental-strip-types tests/mock-agent-runtime.test.mts",
+    "test:runtime-lifecycle": "node --test --experimental-strip-types tests/agent-runtime-lifecycle.test.mts",
     "test:runtime-event-mapper": "node --test --experimental-strip-types tests/langgraph-runtime-event-mapper.test.mts",
     "test:compute-store": "node --test --experimental-strip-types tests/compute-store.test.mts",
     "test:ssh-adapter": "node --test --experimental-strip-types tests/ssh-cli-adapter.test.mts",
