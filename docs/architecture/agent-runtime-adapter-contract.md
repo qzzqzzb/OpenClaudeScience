@@ -8,8 +8,15 @@
 
 ```text
 ui/src/server/shared/contracts/agentRuntime.contract.ts
+ui/src/lib/agent-runtime-protocol.ts
 ui/src/server/shared/contracts/adapterError.contract.ts
 ```
+
+说明：
+
+- `ui/src/server/shared/contracts/agentRuntime.contract.ts` 是第二阶段补的后端 shared contract。
+- `ui/src/lib/agent-runtime-protocol.ts` 是第四阶段补的客户端中立 runtime protocol，后续 MockRuntimeProvider / OpenCodeRuntimeAdapter 优先使用这份客户端可引用类型。
+- 两者当前保持语义对齐，但第四阶段不会立即合并它们，避免一次性影响 server/client import 边界。
 
 统一导出入口：
 
