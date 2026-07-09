@@ -1,9 +1,12 @@
-import type { CopyKey } from "@/lib/i18n";
+import { translate, type CopyKey } from "./i18n.ts";
 
 type Translate = (
   key: CopyKey,
   params?: Record<string, string | number>
 ) => string;
+
+const defaultTranslate: Translate = (key, params) =>
+  translate("zh", key, params);
 
 function normalizeErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -42,7 +45,10 @@ function specificProviderErrorMessage(
   return null;
 }
 
-export function formatChatError(error: unknown, t: Translate): string | null {
+export function formatChatError(
+  error: unknown,
+  t: Translate = defaultTranslate
+): string | null {
   if (!error) {
     return null;
   }
@@ -82,7 +88,7 @@ export function isMalformedRemoteRuntimeError(message: string): boolean {
 
 export function extractRemoteRuntimeErrorMessage(
   message: string,
-  t: Translate
+  t: Translate = defaultTranslate
 ): string | null {
   if (!/RemoteException/i.test(message)) {
     return null;
