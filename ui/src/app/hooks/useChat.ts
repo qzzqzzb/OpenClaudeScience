@@ -1444,7 +1444,6 @@ export function useChat({
   const pendingNewThreadTitleThreadIdRef = useRef<string | null>(null);
   const runtimeStreamRefreshTimerRef = useRef<number | null>(null);
   const agentRuntime = useAgentRuntime();
-  const remoteAgent = agentRuntime.legacyAgent;
   const runtimeClient = useMemo(
     () =>
       runtimeUrl
@@ -1455,18 +1454,24 @@ export function useChat({
         : null,
     [runtimeUrl]
   );
-  const streamEventLayer = useStreamEventLayer(remoteAgent, threadId ?? null);
+  const streamEventLayer = useStreamEventLayer(agentRuntime, threadId ?? null);
   const { clearStreamEvents } = streamEventLayer;
   const threadSnapshotCacheScope = useMemo(
     () =>
       [
-        remoteAgent.url,
-        remoteAgent.graphName,
+        agentRuntime.deploymentUrl,
+        agentRuntime.assistantId,
         runtimeUrl || "",
         resourceId || "",
         workspaceId || "",
       ].join("|"),
-    [remoteAgent.graphName, remoteAgent.url, resourceId, runtimeUrl, workspaceId]
+    [
+      agentRuntime.assistantId,
+      agentRuntime.deploymentUrl,
+      resourceId,
+      runtimeUrl,
+      workspaceId,
+    ]
   );
   const markRunStarting = useCallback(() => {
     setVisibleError(undefined);
@@ -1536,8 +1541,8 @@ export function useChat({
   }, [threadId]);
 
   const streamSubmitOptions = useMemo(
-    () => remoteAgent.getStreamSubmitOptions(streamConfig),
-    [remoteAgent, streamConfig]
+    () => agentRuntime.getStreamSubmitOptions(streamConfig),
+    [agentRuntime, streamConfig]
   );
 
   const workspaceMetadata = useMemo(
@@ -1792,14 +1797,14 @@ export function useChat({
   const streamScopeKey = useMemo(
     () =>
       [
-        remoteAgent.url,
+        agentRuntime.deploymentUrl,
         activeAssistant?.assistant_id || "",
         resourceId || "",
         workspaceId || "",
         threadId || "__new_thread__",
       ].join("|"),
     [
-      remoteAgent.url,
+      agentRuntime.deploymentUrl,
       activeAssistant?.assistant_id,
       resourceId,
       workspaceId,

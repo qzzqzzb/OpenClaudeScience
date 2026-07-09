@@ -1,10 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type {
-  RemoteAgentStreamEvent,
-  WebRemoteAgent,
-} from "@/lib/remote-agent";
+import type { RemoteAgentStreamEvent } from "@/lib/remote-agent";
 
 export type StreamEventKind =
   | "message"
@@ -27,6 +24,10 @@ export interface StreamEventRecord {
 }
 
 const MAX_STREAM_EVENTS = 100;
+
+interface RuntimeStreamEventSource {
+  subscribe(listener: (event: RemoteAgentStreamEvent) => void): () => void;
+}
 
 function collectInterrupts(data: unknown): unknown[] {
   if (!data || typeof data !== "object") return [];
@@ -61,7 +62,7 @@ function getEventKind(event: RemoteAgentStreamEvent): StreamEventKind {
 }
 
 export function useStreamEventLayer(
-  agent: WebRemoteAgent,
+  runtime: RuntimeStreamEventSource,
   currentThreadId?: string | null
 ) {
   const [streamEvents, setStreamEvents] = useState<StreamEventRecord[]>([]);
@@ -93,8 +94,8 @@ export function useStreamEventLayer(
   );
 
   useEffect(() => {
-    return agent.subscribe(appendStreamEvent);
-  }, [agent, appendStreamEvent]);
+    return runtime.subscribe(appendStreamEvent);
+  }, [runtime, appendStreamEvent]);
 
   const clearStreamEvents = useCallback(() => {
     setStreamEvents([]);
