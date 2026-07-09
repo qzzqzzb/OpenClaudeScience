@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useStream } from "@langchain/langgraph-sdk/react";
 import {
   Client,
   type Message,
@@ -22,7 +21,9 @@ import type {
 } from "@/app/types/types";
 import type { StreamConfig } from "@/lib/config";
 import type { RemoteAgentStreamEvent } from "@/lib/remote-agent";
-import { useRemoteAgent } from "@/providers/ClientProvider";
+import type { ClientAgentRuntimeAdapter } from "@/lib/agent-runtime";
+import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
+import { useAgentRuntimeStream } from "@/app/hooks/useAgentRuntimeStream";
 import { useQueryState } from "nuqs";
 import { useStreamEventLayer } from "@/app/hooks/useStreamEventLayer";
 import {
@@ -799,11 +800,11 @@ function useDelayedBoolean(value: boolean, delayMs: number): boolean {
 }
 
 async function loadThreadSnapshot({
-  client,
+  agentRuntime,
   runtimeClient,
   threadId,
 }: {
-  client: ReturnType<typeof useRemoteAgent>["client"];
+  agentRuntime: ClientAgentRuntimeAdapter;
   runtimeClient: Client<StateType> | null;
   threadId: string;
 }): Promise<ThreadState<StateType>[]> {
@@ -813,7 +814,7 @@ async function loadThreadSnapshot({
 
   try {
     const mainState = sanitizeThreadState(
-      await client.threads.getState<StateType>(threadId)
+      await agentRuntime.getThreadState<StateType>(threadId)
     );
     primaryState = mainState;
     hasMainStateMessages = stateHasMessages(mainState);
@@ -822,7 +823,7 @@ async function loadThreadSnapshot({
   }
 
   try {
-    const threadRecord = await client.threads.get<StateType>(threadId);
+    const threadRecord = await agentRuntime.getThread<StateType>(threadId);
     const threadState = primaryState
       ? mergeThreadRecord(primaryState, threadRecord)
       : threadToState(threadId, threadRecord);
@@ -835,7 +836,8 @@ async function loadThreadSnapshot({
   }
 
   try {
-    const mainHistory = await client.threads.getHistory<StateType>(threadId, {
+    const mainHistory = await agentRuntime.getThreadHistory<StateType>({
+      threadId,
       limit: 80,
     });
     const sanitizedHistory = mainHistory.map(sanitizeThreadState);
@@ -860,7 +862,7 @@ async function loadThreadSnapshot({
   }
 
   const pendingRunPreview =
-    (await loadPendingRunInputPreview(client, threadId)) ??
+    (await agentRuntime.getPendingRunInputPreview(threadId)) ??
     (runtimeClient
       ? await loadPendingRunInputPreview(runtimeClient, threadId)
       : null);
@@ -941,13 +943,13 @@ async function loadThreadSnapshot({
 }
 
 function useThreadSnapshot({
-  client,
+  agentRuntime,
   runtimeClient,
   threadId,
   externalThread,
   cacheScope,
 }: {
-  client: ReturnType<typeof useRemoteAgent>["client"];
+  agentRuntime: ClientAgentRuntimeAdapter;
   runtimeClient: Client<StateType> | null;
   threadId: string | null;
   externalThread?: UseStreamThread<StateType>;
@@ -1020,7 +1022,7 @@ function useThreadSnapshot({
           cacheRequestId = existingEntry?.requestId;
         } else {
           pending = loadThreadSnapshot({
-            client,
+            agentRuntime,
             runtimeClient,
             threadId: targetThreadId,
           });
@@ -1071,7 +1073,7 @@ function useThreadSnapshot({
         }
       }
     },
-    [cacheScope, client, runtimeClient, threadId]
+    [agentRuntime, cacheScope, runtimeClient, threadId]
   );
 
   useEffect(() => {
@@ -1441,8 +1443,8 @@ export function useChat({
   const pendingNewThreadTitleRef = useRef<string | null>(null);
   const pendingNewThreadTitleThreadIdRef = useRef<string | null>(null);
   const runtimeStreamRefreshTimerRef = useRef<number | null>(null);
-  const remoteAgent = useRemoteAgent();
-  const client = remoteAgent.client;
+  const agentRuntime = useAgentRuntime();
+  const remoteAgent = agentRuntime.legacyAgent;
   const runtimeClient = useMemo(
     () =>
       runtimeUrl
@@ -1475,7 +1477,7 @@ export function useChat({
     });
   }, []);
   const threadSnapshot = useThreadSnapshot({
-    client,
+    agentRuntime,
     runtimeClient,
     threadId: threadId ?? null,
     externalThread: thread,
@@ -1666,9 +1668,9 @@ export function useChat({
     }));
   }, []);
 
-  const stream = useStream<StateType>({
+  const stream = useAgentRuntimeStream<StateType>({
+    agentRuntime,
     assistantId: activeAssistant?.assistant_id || "",
-    client: client ?? undefined,
     reconnectOnMount: true,
     threadId: threadId ?? null,
     onThreadId: handleGeneratedThreadId,
@@ -2022,9 +2024,9 @@ export function useChat({
       if (!threadId) return;
       // TODO: missing a way how to revalidate the internal state
       // I think we do want to have the ability to externally manage the state
-      await remoteAgent.updateState(threadId, { files });
+      await agentRuntime.updateState({ threadId, values: { files } });
     },
-    [remoteAgent, threadId]
+    [agentRuntime, threadId]
   );
 
   const updateThreadSkills = useCallback(
@@ -2042,7 +2044,10 @@ export function useChat({
 
       setOptimisticThreadSkills(normalized);
       try {
-        await remoteAgent.updateState(threadId, { threadSkills: normalized });
+        await agentRuntime.updateState({
+          threadId,
+          values: { threadSkills: normalized },
+        });
         await threadSnapshot?.mutate?.(threadId);
         onHistoryRevalidate?.();
       } catch (error) {
@@ -2051,7 +2056,7 @@ export function useChat({
         throw error;
       }
     },
-    [onHistoryRevalidate, remoteAgent, threadId, threadSnapshot]
+    [agentRuntime, onHistoryRevalidate, threadId, threadSnapshot]
   );
 
   const isThreadScopedStateLoading = Boolean(
@@ -2144,7 +2149,8 @@ export function useChat({
         return;
       }
 
-      await client.threads.update(threadId, {
+      await agentRuntime.updateThreadMetadata({
+        threadId,
         metadata: {
           ...threadMetadata,
           [THREAD_TITLE_METADATA_KEY]: trimmed,
@@ -2156,7 +2162,7 @@ export function useChat({
       onHistoryRevalidate?.();
     },
     [
-      client.threads,
+      agentRuntime,
       onHistoryRevalidate,
       threadId,
       threadMetadata,
@@ -2182,8 +2188,9 @@ export function useChat({
 
     let cancelled = false;
 
-    void client.threads
-      .update(threadId, {
+    void agentRuntime
+      .updateThreadMetadata({
+        threadId,
         metadata: {
           ...threadMetadata,
           [THREAD_TITLE_METADATA_KEY]: pendingTitle,
@@ -2206,7 +2213,7 @@ export function useChat({
       cancelled = true;
     };
   }, [
-    client.threads,
+    agentRuntime,
     onHistoryRevalidate,
     threadId,
     threadMetadata,

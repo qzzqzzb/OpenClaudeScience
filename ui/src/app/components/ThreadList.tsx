@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/app/hooks/useLanguage";
-import { useRemoteAgent } from "@/providers/ClientProvider";
+import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
 import type { ThreadItem } from "@/app/hooks/useThreads";
 import { useThreads } from "@/app/hooks/useThreads";
 
@@ -159,7 +159,7 @@ export function ThreadList({
   workspaceId,
 }: ThreadListProps) {
   const { t } = useLanguage();
-  const remoteAgent = useRemoteAgent();
+  const agentRuntime = useAgentRuntime();
   const [currentThreadId, setCurrentThreadId] = useQueryState("threadId");
   const [archivingThreadId, setArchivingThreadId] = useState<string | null>(
     null
@@ -263,7 +263,8 @@ export function ThreadList({
 
       setArchivingThreadId(thread.id);
       try {
-        await remoteAgent.client.threads.update(thread.id, {
+        await agentRuntime.updateThreadMetadata({
+          threadId: thread.id,
           metadata: {
             ...thread.metadata,
             internagents_archived: true,
@@ -283,7 +284,7 @@ export function ThreadList({
         setArchivingThreadId(null);
       }
     },
-    [currentThreadId, remoteAgent.client.threads, setCurrentThreadId, t, threads]
+    [agentRuntime, currentThreadId, setCurrentThreadId, t, threads]
   );
 
   const groupLabels: Record<ThreadGroup, string> = {

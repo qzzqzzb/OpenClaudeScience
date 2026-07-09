@@ -45,10 +45,8 @@ import {
   type StandaloneConfig,
 } from "@/lib/config";
 import { Assistant } from "@langchain/langgraph-sdk";
-import {
-  RemoteAgentProvider,
-  useRemoteAgent,
-} from "@/providers/ClientProvider";
+import { RemoteAgentProvider } from "@/providers/ClientProvider";
+import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
 import {
   Select,
   SelectContent,
@@ -183,7 +181,7 @@ function HomePageInner({
   onResourcesRefresh,
 }: HomePageInnerProps) {
   const { language, t } = useLanguage();
-  const remoteAgent = useRemoteAgent();
+  const agentRuntime = useAgentRuntime();
   const searchParams = useSearchParams();
   const [threadId, setThreadId] = useQueryState("threadId");
   const [selectedFilePath, setSelectedFilePath] = useQueryState("file");
@@ -231,8 +229,8 @@ function HomePageInner({
   const previousTabScopeRef = useRef(tabScope);
 
   const fetchAssistant = useCallback(async () => {
-    setAssistant(await remoteAgent.resolveAssistant());
-  }, [remoteAgent]);
+    setAssistant(await agentRuntime.resolveAssistant());
+  }, [agentRuntime]);
 
   useEffect(() => {
     fetchAssistant();

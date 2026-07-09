@@ -6,10 +6,8 @@ import { Archive, ArchiveRestore, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useThreads, type ThreadItem } from "@/app/hooks/useThreads";
-import {
-  RemoteAgentProvider,
-  useRemoteAgent,
-} from "@/providers/ClientProvider";
+import { RemoteAgentProvider } from "@/providers/ClientProvider";
+import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
 import { getConfig, type StandaloneConfig } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import type { UiLanguage } from "@/lib/i18n";
@@ -57,8 +55,8 @@ function ArchivedThreadsFrame({ children }: { children: ReactNode }) {
 
 function ArchivedThreadsCardContent() {
   const { language, t } = useLanguage();
-  const remoteAgent = useRemoteAgent();
-  const threads = useThreads({ archived: true, limit: 8 });
+  const agentRuntime = useAgentRuntime();
+  const threads = useThreads({ archived: true, limit: 8, lightweight: true });
   const [restoringThreadId, setRestoringThreadId] = useState<string | null>(
     null
   );
@@ -73,7 +71,8 @@ function ArchivedThreadsCardContent() {
   async function restoreThread(thread: ThreadItem) {
     setRestoringThreadId(thread.id);
     try {
-      await remoteAgent.client.threads.update(thread.id, {
+      await agentRuntime.updateThreadMetadata({
+        threadId: thread.id,
         metadata: {
           ...thread.metadata,
           internagents_archived: false,

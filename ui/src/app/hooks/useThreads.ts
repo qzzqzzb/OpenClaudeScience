@@ -1,15 +1,13 @@
 import useSWRInfinite from "swr/infinite";
 import { useMemo } from "react";
 import { Client, type Thread } from "@langchain/langgraph-sdk";
-import { useRemoteAgent } from "@/providers/ClientProvider";
+import { useAgentRuntime } from "@/providers/AgentRuntimeContext";
 import {
   inferThreadDescription,
   inferThreadTitle,
 } from "@/app/utils/threadTitle";
-import {
-  loadPendingRunInputPreview,
-  pendingRunValues,
-} from "@/lib/pending-run-input";
+import { pendingRunValues } from "@/lib/pending-run-input";
+import type { ClientAgentRuntimeAdapter } from "@/lib/agent-runtime";
 import {
   messagesFromValues,
   resolveThreadListValues,
@@ -30,7 +28,7 @@ const DEFAULT_PAGE_SIZE = 20;
 
 async function resolveThreadValues(
   thread: Thread,
-  client: Client,
+  agentRuntime: ClientAgentRuntimeAdapter,
   runtimeClient: Client | null
 ): Promise<unknown> {
   let pendingRunStatus: string | undefined;
@@ -38,10 +36,9 @@ async function resolveThreadValues(
   return resolveThreadListValues({
     threadValues: thread.values,
     loadMainStateValues: async () =>
-      (await client.threads.getState(thread.thread_id)).values,
+      (await agentRuntime.getThreadState(thread.thread_id)).values,
     loadPendingValues: async () => {
-      const pendingRunPreview = await loadPendingRunInputPreview(
-        client,
+      const pendingRunPreview = await agentRuntime.getPendingRunInputPreview(
         thread.thread_id
       );
       pendingRunStatus = pendingRunPreview?.status;
@@ -86,7 +83,7 @@ export function useThreads(props: {
   archived?: boolean;
   lightweight?: boolean;
 }) {
-  const remoteAgent = useRemoteAgent();
+  const agentRuntime = useAgentRuntime();
   const runtimeClient = useMemo(
     () =>
       props.runtimeUrl
@@ -110,8 +107,8 @@ export function useThreads(props: {
         kind: "threads" as const,
         pageIndex,
         pageSize,
-        deploymentUrl: remoteAgent.url,
-        assistantId: props.assistantId || remoteAgent.graphName,
+        deploymentUrl: agentRuntime.deploymentUrl,
+        assistantId: props.assistantId || agentRuntime.assistantId,
         status: props?.status,
         resourceId: props.resourceId,
         runtimeUrl: props.runtimeUrl,
@@ -142,7 +139,7 @@ export function useThreads(props: {
       archived: boolean;
       lightweight: boolean;
     }) => {
-      const threads = await remoteAgent.searchThreads({
+      const threads = await agentRuntime.searchThreads({
         limit: pageSize,
         offset: pageIndex * pageSize,
         status,
@@ -160,7 +157,7 @@ export function useThreads(props: {
             ? thread.values
             : await resolveThreadValues(
                 thread,
-                remoteAgent.client,
+                agentRuntime,
                 runtimeClient
               ),
         }))
