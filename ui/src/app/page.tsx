@@ -102,7 +102,7 @@ const OPEN_WORKSPACE_VALUE = "__open_workspace__";
 const ADD_REMOTE_WORKSPACE_VALUE = "__add_remote_workspace__";
 const NEW_THREAD_MARKER = "__new_thread__";
 const BACKEND_READY_CACHE_PREFIX = "internagents.backend.ready";
-const BACKEND_READY_CACHE_TTL_MS = 5 * 60 * 1000;
+const BACKEND_READY_CACHE_TTL_MS = 30 * 60 * 1000;
 
 function backendReadyCacheKey(deploymentUrl: string): string {
   return `${BACKEND_READY_CACHE_PREFIX}:${deploymentUrl}`;
@@ -212,6 +212,7 @@ function HomePageInner({
     runtimeUrl: activeResource.runtimeUrl,
     assistantId: activeAssistantId,
     workspaceId: isActiveLocalResource ? activeWorkspace?.id : undefined,
+    lightweight: true,
   });
   const mutateOpenThreadTabs = threadTabs.mutate;
 
@@ -1950,8 +1951,15 @@ function HomePageContent() {
   }
 
   const activeDeploymentUrl = activeResource.runtimeUrl || config.deploymentUrl;
+  const recentlyReadyBackend =
+    isLocalDeploymentUrl(activeDeploymentUrl) &&
+    readBackendReadyCache(activeDeploymentUrl);
 
-  if (isLocalDeploymentUrl(activeDeploymentUrl) && !localBackendReady) {
+  if (
+    isLocalDeploymentUrl(activeDeploymentUrl) &&
+    !localBackendReady &&
+    !recentlyReadyBackend
+  ) {
     return <StartupState />;
   }
 

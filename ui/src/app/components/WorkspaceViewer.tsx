@@ -79,6 +79,42 @@ const PREVIEW_KIND_LABELS: Record<WorkspaceFileResponse["previewKind"], string> 
     unsupported: "File",
     xlsx: "Excel",
   };
+const MAX_FILE_PREVIEW_CACHE_ENTRIES = 30;
+const DEFAULT_WORKSPACE_SCOPE = "workspace";
+
+const filePreviewCache = new Map<string, WorkspaceFileResponse>();
+
+function filePreviewCacheKey({
+  path,
+  resourceId,
+  workspaceId,
+}: {
+  path: string;
+  resourceId?: string;
+  workspaceId?: string;
+}): string {
+  return [
+    resourceId || "local",
+    workspaceId || DEFAULT_WORKSPACE_SCOPE,
+    path,
+  ].join("::");
+}
+
+function rememberFilePreview(
+  key: string,
+  file: WorkspaceFileResponse
+): void {
+  filePreviewCache.delete(key);
+  filePreviewCache.set(key, file);
+
+  while (filePreviewCache.size > MAX_FILE_PREVIEW_CACHE_ENTRIES) {
+    const oldestKey = filePreviewCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    filePreviewCache.delete(oldestKey);
+  }
+}
 
 function previewKindLabel(kind: WorkspaceFileResponse["previewKind"]): string {
   return PREVIEW_KIND_LABELS[kind] || kind;
@@ -386,7 +422,20 @@ export function WorkspaceViewer({
     }
 
     let isCancelled = false;
-    setIsLoading(true);
+    const cacheKey = filePreviewCacheKey({
+      path: selectedPath,
+      resourceId,
+      workspaceId,
+    });
+    const cachedFile = filePreviewCache.get(cacheKey) || null;
+
+    if (cachedFile) {
+      rememberFilePreview(cacheKey, cachedFile);
+      setFile(cachedFile);
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
 
     getWorkspaceFile({
@@ -397,6 +446,17 @@ export function WorkspaceViewer({
     })
       .then((payload) => {
         if (!isCancelled) {
+          rememberFilePreview(cacheKey, payload);
+          if (payload.path && payload.path !== selectedPath) {
+            rememberFilePreview(
+              filePreviewCacheKey({
+                path: payload.path,
+                resourceId,
+                workspaceId,
+              }),
+              payload
+            );
+          }
           setFile(payload);
           if (payload.path && payload.path !== selectedPath) {
             onResolvedPath?.(payload.path);
@@ -405,8 +465,10 @@ export function WorkspaceViewer({
       })
       .catch((err) => {
         if (!isCancelled) {
-          setFile(null);
-          setError(err instanceof Error ? err.message : t("unableToLoadFile"));
+          if (!cachedFile) {
+            setFile(null);
+            setError(err instanceof Error ? err.message : t("unableToLoadFile"));
+          }
         }
       })
       .finally(() => {

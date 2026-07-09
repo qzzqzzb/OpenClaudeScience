@@ -84,6 +84,7 @@ export function useThreads(props: {
   assistantId?: string;
   workspaceId?: string;
   archived?: boolean;
+  lightweight?: boolean;
 }) {
   const remoteAgent = useRemoteAgent();
   const runtimeClient = useMemo(
@@ -116,6 +117,7 @@ export function useThreads(props: {
         runtimeUrl: props.runtimeUrl,
         workspaceId: props.workspaceId,
         archived,
+        lightweight: props.lightweight === true,
       };
     },
     async ({
@@ -126,6 +128,7 @@ export function useThreads(props: {
       pageIndex,
       pageSize,
       archived,
+      lightweight,
     }: {
       kind: "threads";
       pageIndex: number;
@@ -137,6 +140,7 @@ export function useThreads(props: {
       runtimeUrl?: string;
       workspaceId?: string;
       archived: boolean;
+      lightweight: boolean;
     }) => {
       const threads = await remoteAgent.searchThreads({
         limit: pageSize,
@@ -152,11 +156,13 @@ export function useThreads(props: {
       const resolvedThreads = await Promise.all(
         threads.map(async (thread) => ({
           thread,
-          values: await resolveThreadValues(
-            thread,
-            remoteAgent.client,
-            runtimeClient
-          ),
+          values: lightweight
+            ? thread.values
+            : await resolveThreadValues(
+                thread,
+                remoteAgent.client,
+                runtimeClient
+              ),
         }))
       );
 

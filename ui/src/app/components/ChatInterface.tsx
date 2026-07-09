@@ -1212,6 +1212,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(
       resourceId,
       assistantId: assistant?.assistant_id,
       workspaceId,
+      lightweight: true,
     });
     const [mentionWorkspaceFiles, setMentionWorkspaceFiles] = useState<
       WorkspaceEntry[]

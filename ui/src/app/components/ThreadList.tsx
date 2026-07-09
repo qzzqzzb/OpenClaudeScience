@@ -171,6 +171,7 @@ export function ThreadList({
     runtimeUrl,
     assistantId,
     workspaceId,
+    lightweight: true,
   });
 
   const flattened = useMemo(() => {
