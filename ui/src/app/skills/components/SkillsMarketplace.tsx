@@ -714,8 +714,8 @@ export function SkillsMarketplace({
     string | null
   >(null);
   const [pickingLocalFolder, setPickingLocalFolder] = useState(false);
-  const [checkingStatus, setCheckingStatus] = useState(false);
-  const [restarting, setRestarting] = useState(false);
+  const [_checkingStatus, setCheckingStatus] = useState(false);
+  const [_restarting, setRestarting] = useState(false);
   const [autoRestart, setAutoRestart] = useState(false);
   const [backendStatus, setBackendStatus] =
     useState<BackendStatusResult | null>(null);
@@ -736,6 +736,7 @@ export function SkillsMarketplace({
   const [detailSkill, setDetailSkill] = useState<SkillEntry | null>(null);
   const selectedSaveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const pendingBackendApplyVersionRef = useRef(0);
+  const backendApplyInFlightRef = useRef(false);
 
   const workbenchHref = useMemo(
     () => storedWorkbenchHref ?? workbenchHrefFromSearchParams(searchParams),
@@ -746,9 +747,7 @@ export function SkillsMarketplace({
     importingSkill !== null ||
     updatingSkillKey !== null ||
     connectionsSaving !== null ||
-    pickingLocalFolder ||
-    checkingStatus ||
-    restarting;
+    pickingLocalFolder;
   const skillToggleBusy =
     loading || importingSkill !== null || updatingSkillKey !== null;
   const localSkillImportBusy = pickingLocalFolder || importingSkill !== null;
@@ -1374,6 +1373,10 @@ export function SkillsMarketplace({
 
     let cancelled = false;
     const checkAndRestart = async () => {
+      if (backendApplyInFlightRef.current) {
+        return;
+      }
+      backendApplyInFlightRef.current = true;
       try {
         const status = await checkBackendStatus();
         if (!cancelled && status.status === "idle") {
@@ -1381,6 +1384,8 @@ export function SkillsMarketplace({
         }
       } catch {
         // Keep this quiet; install remains saved and the next poll can retry.
+      } finally {
+        backendApplyInFlightRef.current = false;
       }
     };
     void checkAndRestart();

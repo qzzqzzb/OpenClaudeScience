@@ -1,17 +1,21 @@
 {
   "deploymentUrl": "http://127.0.0.1:2024",
-  "assistantId": "agent_local",
+  "assistantId": "agent",
   "langsmithApiKey": "",
   "defaultResourceId": "local",
   "resources": [
     {
       "id": "local",
       "label": "Current Machine",
-      "assistantId": "agent_local"
+      "assistantId": "agent"
     }
   ],
   "stream": {
-    "modes": ["messages-tuple", "updates", "values"],
+    "modes": [
+      "messages-tuple",
+      "updates",
+      "values"
+    ],
     "subgraphs": true
   }
 }
