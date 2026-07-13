@@ -1,7 +1,7 @@
 import {
   buildOfficeReadablePreview,
   officePreviewToMarkdown,
-} from "@/app/api/workspace/_lib/office-preview";
+} from "./officePreview.adapter";
 
 const MAX_PDF_EXTRACT_PAGES = 80;
 export const MAX_PDF_EXTRACT_CHARS = 200_000;

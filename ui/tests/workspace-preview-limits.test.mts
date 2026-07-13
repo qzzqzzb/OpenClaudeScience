@@ -5,7 +5,7 @@ import {
   getPreviewContentSizeLimit,
   MAX_PREVIEW_FILE_SIZE,
   MAX_TEXT_FILE_SIZE,
-} from "../src/app/api/workspace/_lib/workspace.ts";
+} from "../src/server/domains/workspace/adapters/workspaceFs.adapter.ts";
 import type { WorkspacePreviewKind } from "../src/app/types/workspace.ts";
 
 const ONE_HUNDRED_MIB = 100 * 1024 * 1024;

@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   normalizeSkillMarkdown,
   parseSkillFrontmatter,
-} from "../src/app/api/skills/_lib/skill-frontmatter.ts";
+} from "../src/server/domains/skills/adapters/skillFrontmatter.ts";
 
 const pdbfixerSkill = `---
 name: molclaw-pdbfixer

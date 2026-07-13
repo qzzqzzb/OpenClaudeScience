@@ -5,7 +5,7 @@ import {
   getPreviewContentSizeLimit,
   getPreviewKind,
   WorkspaceRangeNotSatisfiableError,
-} from "@/app/api/workspace/_lib/workspace";
+} from "./workspaceFs.adapter";
 
 export {
   getFileExtension,

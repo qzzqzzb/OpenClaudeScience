@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   buildWindowsFolderPickerScript,
   decodeWindowsFolderPickerOutput,
-} from "../src/app/api/_lib/local-folder-picker.ts";
+} from "../src/server/shared/adapters/localFolderPicker.adapter.ts";
 
 test("decodeWindowsFolderPickerOutput preserves UTF-8 folder paths", () => {
   const selectedPath = "C:\\Users\\测试\\项目 中文";

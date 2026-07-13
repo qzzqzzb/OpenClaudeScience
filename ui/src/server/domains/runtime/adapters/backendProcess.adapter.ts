@@ -16,9 +16,9 @@ import { spawn, execFile } from "child_process";
 import { promisify } from "util";
 import {
   getResourcesConfigPath,
-  getWorkspaceRoot,
   type ResourcesFile,
-} from "@/app/api/workspace/_lib/workspace";
+} from "@/server/domains/workspace/adapters/workspaceFs.adapter";
+import { getWorkspaceRoot } from "@/server/shared/adapters/workspaceRoot.adapter";
 
 const execFileAsync = promisify(execFile);
 

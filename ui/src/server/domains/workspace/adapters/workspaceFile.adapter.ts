@@ -3,7 +3,7 @@ import {
   readWorkspaceRawFile as legacyReadWorkspaceRawFile,
   streamLocalWorkspaceRawFile as legacyStreamLocalWorkspaceRawFile,
   writeWorkspaceRawFile as legacyWriteWorkspaceRawFile,
-} from "@/app/api/workspace/_lib/workspace";
+} from "./workspaceFs.adapter";
 import type {
   ReadWorkspaceFileInput,
   ReadWorkspaceRawFileInput,

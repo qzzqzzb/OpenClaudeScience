@@ -16,6 +16,7 @@ import type {
   WorkspaceEntry,
   WorkspacePreviewKind,
 } from "@/app/types/workspace";
+import { getWorkspaceRoot } from "../../../shared/adapters/workspaceRoot.adapter.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -812,15 +813,6 @@ function readRootEnvValue(name: string): string | undefined {
     return undefined;
   }
   return undefined;
-}
-
-export function getWorkspaceRoot(): string {
-  return path.resolve(
-    process.env.INTERNAGENTS_APP_ROOT ||
-      process.env.INTERNAGENTS_WORKSPACE_ROOT ||
-      process.env.WORKSPACE_ROOT ||
-      path.join(process.cwd(), "..")
-  );
 }
 
 function enabledResources(): ResourceRecord[] {

@@ -1,7 +1,7 @@
 import {
   readSkillsConfig,
   updateSkillsConfig,
-} from "@/app/api/skills/_lib/skills";
+} from "./skillsInfrastructure.adapter";
 import type { SkillsConfigResponse } from "../skills.types";
 
 export async function readSkillSettings(): Promise<SkillsConfigResponse> {

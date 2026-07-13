@@ -1,4 +1,4 @@
-import { importSkills } from "@/app/api/skills/_lib/skills";
+import { importSkills } from "./skillsInfrastructure.adapter";
 import type {
   ImportSkillsResponse,
   SkillImportType,

@@ -1,7 +1,7 @@
 import {
   chooseLocalFolder,
   isUserCancelled,
-} from "@/app/api/_lib/local-folder-picker";
+} from "@/server/shared/adapters/localFolderPicker.adapter";
 
 export { isUserCancelled };
 

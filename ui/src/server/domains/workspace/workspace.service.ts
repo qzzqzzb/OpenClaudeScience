@@ -2,7 +2,7 @@ import path from "path";
 import {
   buildOfficePreview,
   isOfficePreviewKind,
-} from "@/app/api/workspace/_lib/office-preview";
+} from "./adapters/officePreview.adapter";
 import {
   workspaceDirectoryAdapter,
 } from "./adapters/workspaceDirectory.adapter";

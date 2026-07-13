@@ -1,4 +1,4 @@
-import { checkForUpdate } from "@/app/api/update/_lib/update";
+import { checkForUpdate } from "./updateInfrastructure.adapter";
 import type { UpdateStatus } from "../update.types";
 
 export async function checkUpdateRelease(): Promise<UpdateStatus> {

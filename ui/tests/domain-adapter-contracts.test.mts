@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import type { ComputeAdapter } from "../src/server/domains/compute/compute.types.ts";
@@ -160,4 +162,29 @@ test("workspace root adapter resolves app root without importing workspace route
       process.env.INTERNAGENTS_APP_ROOT = previous;
     }
   }
+});
+
+function listTypeScriptFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      return listTypeScriptFiles(entryPath);
+    }
+    return /\.(?:ts|tsx|mts)$/.test(entry.name) ? [entryPath] : [];
+  });
+}
+
+test("production code has no dependency on API route _lib modules", () => {
+  const sourceRoot = path.resolve(process.cwd(), "src");
+  const violations = listTypeScriptFiles(sourceRoot)
+    .filter((filePath) => /[/\\]_lib[/\\].*\.ts$/.test(filePath))
+    .concat(
+      listTypeScriptFiles(sourceRoot).filter((filePath) =>
+        /(?:app\/api|app\\api).*[/\\]_lib[/\\]/.test(
+          readFileSync(filePath, "utf8")
+        )
+      )
+    );
+
+  assert.deepEqual(violations, []);
 });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildWindowsOpenFolderScript } from "../src/app/api/workspace/_lib/open-folder.ts";
+import { buildWindowsOpenFolderScript } from "../src/server/domains/workspace/adapters/openFolder.adapter.ts";
 
 test("buildWindowsOpenFolderScript encodes the folder path for PowerShell", () => {
   const folderPath = "C:\\Users\\test user\\Videos\\project";

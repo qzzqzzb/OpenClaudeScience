@@ -1,10 +1,10 @@
 import {
   getResourcesConfigPath,
   getWorkspaceResource,
-  getWorkspaceRoot,
   resolveWorkspacePath,
   updateLocalResourceWorkspace,
-} from "@/app/api/workspace/_lib/workspace";
+} from "@/server/domains/workspace/adapters/workspaceFs.adapter";
+import { getWorkspaceRoot } from "@/server/shared/adapters/workspaceRoot.adapter";
 
 export function getConfigWorkspaceRoot(): string {
   return getWorkspaceRoot();

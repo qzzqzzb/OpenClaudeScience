@@ -1,4 +1,4 @@
-import { restartBackend } from "@/app/api/runtime/_lib/backend";
+import { restartBackend } from "./backendProcess.adapter";
 import type { BackendRestartResult } from "../runtime.types";
 
 const RESTART_ROUTE_TIMEOUT_MS = 45_000;

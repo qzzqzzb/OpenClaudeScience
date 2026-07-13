@@ -3,7 +3,7 @@ import {
   removeLocalWorkspace,
   updateLocalResourceWorkspace,
   updateLocalWorkspaceRecord,
-} from "@/app/api/workspace/_lib/workspace";
+} from "@/server/domains/workspace/adapters/workspaceFs.adapter";
 
 export {
   listLocalWorkspaces,

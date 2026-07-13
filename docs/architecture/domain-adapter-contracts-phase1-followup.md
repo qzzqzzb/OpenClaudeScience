@@ -4,11 +4,11 @@ This document is the concrete contract checklist for the current `ui/src/server/
 
 ## Stable Contract Rules
 
-- Services call adapter objects with structured input objects where new code is added; positional legacy wrappers remain only for route compatibility and tests.
+- Services call adapter objects with structured input objects; route-facing wrappers may keep positional compatibility without owning infrastructure logic.
 - Adapter outputs are domain DTOs, never raw SDK, SSH stdout, process handles, or local filesystem internals.
-- Remote/process adapters accept or reserve `signal` and `timeoutMs` in input types before the bottom implementation is fully replaced.
+- Remote/process adapters normalize timeout, cancellation, progress, and error behavior before invoking domain-owned infrastructure modules.
 - Adapter errors should use domain-safe messages and must not include API keys, `.env` contents, SSH private key paths, tokens, or passwords.
-- Concrete adapters may call transitional `_lib` modules only behind the adapter boundary; new service code should depend on the contract interfaces in `*.types.ts`.
+- Concrete adapters and services must not import `ui/src/app/api/**/_lib`; bottom implementations live under their owning server domain or shared adapter package.
 
 ## Workspace Adapter
 
@@ -33,11 +33,13 @@ Current concrete adapters:
 
 - `workspaceDirectoryAdapter` in `workspaceDirectory.adapter.ts`.
 - `workspaceFileAdapter` in `workspaceFile.adapter.ts`.
-- `workspaceRootAdapter` in `ui/src/server/shared/adapters/workspaceRoot.adapter.ts` removes several compute/skills imports from workspace `_lib`.
+- `workspaceRootAdapter` in `ui/src/server/shared/adapters/workspaceRoot.adapter.ts` owns cross-domain application-root resolution.
+- Filesystem, office preview, and desktop-open implementations now live under `ui/src/server/domains/workspace/adapters`.
 
-Remaining transitional bottom calls:
+Migration status:
 
-- Remote workspace protocol and office preview still reuse existing `_lib` implementation until SSH file operations are split into a dedicated `SshWorkspaceAdapter`.
+- Workspace services and adapters no longer import API route `_lib` modules.
+- `workspaceFs.adapter.ts` owns local/remote workspace filesystem protocol; `officePreview.adapter.ts` and `openFolder.adapter.ts` own their platform integrations.
 
 ## Runtime Adapter
 
@@ -59,9 +61,10 @@ Current concrete adapter:
 
 - `runtimeAdapter` in `runtime.service.ts` fronts health, status, restart, and desktop config adapters.
 
-Remaining transitional bottom calls:
+Migration status:
 
-- `backendStatus.adapter.ts` and `backendRestart.adapter.ts` still call `runtime/_lib/backend`; those should be split next into process-state and managed-process adapters.
+- `backendStatus.adapter.ts` and `backendRestart.adapter.ts` call the domain-owned `backendProcess.adapter.ts` implementation.
+- The former `runtime/_lib/backend` implementation has been removed.
 
 ## Remote Adapter
 
@@ -84,9 +87,11 @@ Current concrete adapter:
 
 - `remoteAdapter` in `remote.service.ts` centralizes remote capability calls for the route-facing stream helpers.
 
-Remaining transitional bottom calls:
+Migration status:
 
-- `remoteBackendCli.adapter.ts` and `remoteRuntime.adapter.ts` still wrap `remote-connections/_lib/remote-connections`; split next into SSH command, release download, tunnel, and resource-write adapters.
+- SSH probing uses the shared `sshCliAdapter` contract.
+- Runtime provisioning and backend CLI synchronization are domain-owned by `remoteInfrastructure.adapter.ts`, reached only through `remoteRuntime.adapter.ts` and `remoteBackendCli.adapter.ts`.
+- The former `remote-connections/_lib/remote-connections` implementation has been removed.
 
 ## Compute Adapter
 
@@ -109,7 +114,16 @@ Side effects:
 Current concrete adapter:
 
 - `computeAdapter` in `compute.service.ts` fronts host/store/job protocol adapters.
-- `workspaceRootAdapter` is used for compute state paths so compute no longer imports workspace `_lib` just to resolve app root.
+- `workspaceRootAdapter` is used for compute state paths.
+- Obsolete `compute/_lib/compute-auth.ts` and `compute/_lib/ssh-remote-jobs.ts` duplicates have been removed; compute behavior is owned by `computeAuth`, `computeHost`, `computeStore`, `computeJob`, and `computeRemoteJobProtocol` adapters.
+
+## Remaining Domain Migrations
+
+- Skills import/config/frontmatter implementations now live under `ui/src/server/domains/skills/adapters`.
+- Update check/install/rollback/state implementations now live under `ui/src/server/domains/update/adapters`.
+- Local folder selection is a shared platform adapter at `ui/src/server/shared/adapters/localFolderPicker.adapter.ts`.
+- Config, resources, and workspaces adapters consume server-domain modules rather than API route internals.
+- `domain-adapter-contracts.test.mts` scans production TypeScript and fails if an API route `_lib` implementation or import is reintroduced.
 
 ## Chat Runtime Facade
 

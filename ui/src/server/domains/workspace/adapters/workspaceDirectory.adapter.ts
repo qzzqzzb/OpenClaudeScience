@@ -2,7 +2,7 @@ import {
   listLocalWorkspaceEntriesFromResolvedPath,
   listWorkspaceEntries as legacyListWorkspaceEntries,
   searchWorkspaceFiles as legacySearchWorkspaceFiles,
-} from "@/app/api/workspace/_lib/workspace";
+} from "./workspaceFs.adapter";
 import type { WorkspaceEntry } from "@/app/types/workspace";
 import { resolveWorkspacePath } from "./workspacePath.adapter";
 import type {

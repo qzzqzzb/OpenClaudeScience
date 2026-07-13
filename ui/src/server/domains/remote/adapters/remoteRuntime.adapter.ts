@@ -1,7 +1,7 @@
 import {
   ensureRemoteResourceRuntime,
   setupRemoteConnection,
-} from "@/app/api/remote-connections/_lib/remote-connections";
+} from "./remoteInfrastructure.adapter";
 import type {
   RemoteConnectionEnsureResult,
   RemoteConnectionSetupRequest,

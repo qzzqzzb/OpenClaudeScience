@@ -1,8 +1,8 @@
 import {
   getWorkspaceResource,
   resolveWorkspacePath as legacyResolveWorkspacePath,
-} from "@/app/api/workspace/_lib/workspace";
-import type { ResourceRecord } from "@/app/api/workspace/_lib/workspace";
+} from "./workspaceFs.adapter";
+import type { ResourceRecord } from "./workspaceFs.adapter";
 
 export interface ResolvedWorkspacePath {
   root: string;

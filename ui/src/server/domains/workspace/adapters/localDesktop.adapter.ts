@@ -1,7 +1,7 @@
 import { execFile } from "child_process";
 import { promises as fs } from "fs";
 import { promisify } from "util";
-import { openLocalFolder as legacyOpenLocalFolder } from "@/app/api/workspace/_lib/open-folder";
+import { openLocalFolder as openFolderOnDesktop } from "./openFolder.adapter";
 
 const execFileAsync = promisify(execFile);
 const OPEN_FILE_TIMEOUT_MS = 10_000;
@@ -14,7 +14,7 @@ export async function assertLocalFile(filePath: string): Promise<void> {
 }
 
 export async function openLocalFolder(folderPath: string): Promise<void> {
-  await legacyOpenLocalFolder(folderPath);
+  await openFolderOnDesktop(folderPath);
 }
 
 export async function openLocalFile(filePath: string): Promise<void> {

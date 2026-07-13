@@ -3,11 +3,11 @@ import { execFile } from "child_process";
 import os from "os";
 import path from "path";
 import { promisify } from "util";
-import { getWorkspaceRoot } from "@/app/api/workspace/_lib/workspace";
+import { getWorkspaceRoot } from "@/server/shared/adapters/workspaceRoot.adapter";
 import {
   normalizeSkillMarkdown,
   parseSkillFrontmatter,
-} from "@/app/api/skills/_lib/skill-frontmatter";
+} from "./skillFrontmatter";
 import type {
   ImportSkillsResponse,
   SkillImportType,

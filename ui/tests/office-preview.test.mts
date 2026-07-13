@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   buildOfficePreview,
   officePreviewToMarkdown,
-} from "../src/app/api/workspace/_lib/office-preview.ts";
+} from "../src/server/domains/workspace/adapters/officePreview.adapter.ts";
 
 type ZipInput = Record<string, string>;
 

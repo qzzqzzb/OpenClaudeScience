@@ -6,7 +6,7 @@ import path from "path";
 import { Readable, Transform } from "stream";
 import { pipeline } from "stream/promises";
 import { promisify } from "util";
-import { getWorkspaceRoot } from "@/app/api/workspace/_lib/workspace";
+import { getWorkspaceRoot } from "@/server/shared/adapters/workspaceRoot.adapter";
 
 const execFileAsync = promisify(execFile);
 

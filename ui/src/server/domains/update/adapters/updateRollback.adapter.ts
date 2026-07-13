@@ -1,4 +1,4 @@
-import { rollbackUpdate } from "@/app/api/update/_lib/update";
+import { rollbackUpdate } from "./updateInfrastructure.adapter";
 import type { UpdateStatus } from "../update.types";
 
 export async function rollbackUpdateInstall(): Promise<UpdateStatus> {

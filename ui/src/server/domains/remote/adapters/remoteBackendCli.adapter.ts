@@ -1,4 +1,4 @@
-import { pushRemoteBackendCli } from "@/app/api/remote-connections/_lib/remote-connections";
+import { pushRemoteBackendCli } from "./remoteInfrastructure.adapter";
 import type {
   RemoteBackendCliPushRequest,
   RemoteBackendCliPushResult,

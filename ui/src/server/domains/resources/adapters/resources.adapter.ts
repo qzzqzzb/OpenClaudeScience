@@ -1,7 +1,7 @@
 import {
   readWorkspaceResourcesConfig,
   type ResourceRecord,
-} from "@/app/api/workspace/_lib/workspace";
+} from "@/server/domains/workspace/adapters/workspaceFs.adapter";
 import type { ResourceConfig } from "@/lib/config";
 
 function assistantIdForResource(resource: ResourceRecord): string {

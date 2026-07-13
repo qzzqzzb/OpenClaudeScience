@@ -17,16 +17,16 @@ import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import type { ReadableStream as WebReadableStream } from "stream/web";
 import { promisify } from "util";
-import { getCurrentVersionInfo } from "@/app/api/update/_lib/update";
+import { getCurrentVersionInfo } from "@/server/domains/update/adapters/updateInfrastructure.adapter";
 import {
   getResourcesConfigPath,
   getWritableResourcesConfig,
-  getWorkspaceRoot,
   readWorkspaceResourcesConfig,
   type ResourceRecord,
   writeResourcesConfigAtPath,
-} from "@/app/api/workspace/_lib/workspace";
+} from "@/server/domains/workspace/adapters/workspaceFs.adapter";
 import { sshCliAdapter } from "@/server/shared/adapters/sshCli.adapter";
+import { getWorkspaceRoot } from "@/server/shared/adapters/workspaceRoot.adapter";
 
 const execFileAsync = promisify(execFile);
 const LEGACY_REMOTE_RUNTIME_PORT = 22024;
